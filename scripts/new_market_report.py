@@ -10,12 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import market  # noqa: E402
+from market_spec import get_spec  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("new_dir")
-    ap.add_argument("--ref", default=str(ROOT / "data" / "raw" / "public"))
+    ap.add_argument("--ref", default=str(get_spec().data_path), help="reference (current market) data dir; default from the active MarketSpec")
     ap.add_argument("--out", default=str(ROOT / "docs" / "new_market_report.md"))
     a = ap.parse_args()
     if not Path(a.new_dir).is_dir():

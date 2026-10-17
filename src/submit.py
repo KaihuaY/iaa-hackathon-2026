@@ -9,23 +9,31 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from data import load
+import data as _data
+from market_spec import get_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 SUB_DIR = ROOT / "submissions"
-COMP = "iaa-ai-assisted-hackathon-2026-part-1"
+
+
+def __getattr__(name):
+    if name == "COMP":                          # competition slug of the active MarketSpec (PEP 562)
+        return get_spec().competition
+    raise AttributeError(f"module 'submit' has no attribute {name!r}")
 
 
 def validate(sub: pd.DataFrame) -> pd.DataFrame:
     """Order like sample_submission and enforce the competition's format rules."""
-    sample = load("sample_submission")
+    spec = get_spec()
+    sample = _data.load("sample_submission")
     assert sub.row_id.is_unique, "duplicate row_id"
     assert set(sub.row_id) == set(sample.row_id), "row_id set differs from sample_submission"
     out = sample[["row_id"]].merge(sub, on="row_id", how="left")
     p = out.prediction.to_numpy(float)
     assert np.isfinite(p).all(), "non-finite predictions"
     assert (p >= 0).all(), "negative predictions"
-    assert len(out) == 626_639, len(out)
+    expected = len(sample) if spec.expected_rows is None else spec.expected_rows
+    assert len(out) == expected, len(out)
     return out
 
 
@@ -70,17 +78,17 @@ def _kaggle(*args) -> str:
 
 
 def remaining_today() -> int:
-    out = _kaggle("submission-limits", COMP)
+    out = _kaggle("submission-limits", get_spec().competition)
     return int(next(l for l in out.splitlines() if l.startswith("Remaining today")).split(":")[1])
 
 
 def submit(path: Path, message: str, wait: int = 600) -> float | None:
     """Upload via the Kaggle CLI and poll until the public score is available."""
-    _kaggle("submit", COMP, "-f", str(path), "-m", message)
+    _kaggle("submit", get_spec().competition, "-f", str(path), "-m", message)
     t0 = time.time()
     while time.time() - t0 < wait:
         time.sleep(15)
-        subs = json.loads(_kaggle("submissions", COMP, "--format", "json"))
+        subs = json.loads(_kaggle("submissions", get_spec().competition, "--format", "json"))
         mine = [s for s in subs if s.get("description") == message or s.get("fileName") == path.name]
         if mine:
             s = mine[0]

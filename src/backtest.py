@@ -6,18 +6,20 @@ train on years < T with labels trended to year T, predict year-T rows, compare w
 import numpy as np
 import pandas as pd
 
-from data import LINES
 from features import build_base, model_matrix
 from metrics import d2_tweedie
+from market_spec import get_spec
 from models import make
 from target import prepare_target
 
 
-def level_backtest(target_cfg: dict, methods=("premium", "claims", "none"), years=(2023, 2024),
+def level_backtest(target_cfg: dict, methods=("premium", "claims", "none"), years=None,
                    model: str = "lgbm", n_iter: int = 300, features: dict | None = None) -> pd.DataFrame:
+    spec = get_spec()
+    years = spec.backtest_years if years is None else years
     base = build_base()
     rows = []
-    for line in LINES:
+    for line in spec.lines:
         tr, te = base[f"train_{line}"], base[f"test_{line}"]
         X, _, _ = model_matrix(tr, te, features or {"history": True})
         yr = tr.period_start.dt.year.values
