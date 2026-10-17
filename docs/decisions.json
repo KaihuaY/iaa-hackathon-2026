@@ -1,0 +1,138 @@
+{
+  "exported": "2026-10-17T03:37:44.629Z",
+  "decisions": [
+    {
+      "rank": 1,
+      "id": "structure",
+      "title": "Model structure and algorithm",
+      "impact": "High",
+      "chosen": [
+        "A. Tweedie GBM per line (LightGBM, power ≈ 1.5, exposure offset)"
+      ],
+      "other": "does PCA model help to better identify the factors?   you should try to train different models and choose the optimial one based on the kaggle score. ",
+      "notes": ""
+    },
+    {
+      "rank": 2,
+      "id": "features",
+      "title": "Feature set (choose all that apply)",
+      "impact": "High",
+      "chosen": [
+        "A. Policy + customer + address + same-year weather (cleaned, leakage excluded)",
+        "B. Experience rating: prior claims of the same policy / customer, across all lines"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 3,
+      "id": "development",
+      "title": "Immature 2024 claims (late reporting and open claims)",
+      "impact": "High",
+      "chosen": [
+        "B. Develop to ultimate: IBNR count factors from report lags + severity uplift for open / late claims"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 4,
+      "id": "validation",
+      "title": "Validation scheme",
+      "impact": "High",
+      "chosen": [
+        "C. K-fold grouped by policy across all years"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 5,
+      "id": "large",
+      "title": "Large-loss treatment",
+      "impact": "Medium-High",
+      "chosen": [
+        "B. Cap per line (e.g. 99.5th pct); spread the excess as a loading"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 6,
+      "id": "trend",
+      "title": "Trend and calibration to the 2025 level",
+      "impact": "Medium",
+      "chosen": [
+        "D. Use the premium change (+3–6 %) as the inflation index"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 7,
+      "id": "weights",
+      "title": "Training window and year weighting",
+      "impact": "Medium",
+      "chosen": [
+        "B. All years, 2024 down-weighted by maturity"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 8,
+      "id": "pooling",
+      "title": "Separate models per line or one pooled model",
+      "impact": "Medium",
+      "chosen": [
+        "A. Separate model per line"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 9,
+      "id": "ensemble",
+      "title": "Ensembling and choosing the final submission",
+      "impact": "Medium",
+      "chosen": [
+        "B. Blend GLM + GBM (weights chosen on our validation)"
+      ],
+      "other": "does PCA model help to better identify the factors? ",
+      "notes": ""
+    },
+    {
+      "rank": 10,
+      "id": "exposure",
+      "title": "Exposure handling",
+      "impact": "Low-Medium",
+      "chosen": [
+        "A. log(exposure) offset, with new_business as a feature"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 11,
+      "id": "dq",
+      "title": "Data-quality fixes",
+      "impact": "Low",
+      "chosen": [
+        "A. Fix as in src/data.py (pad ids, recompute exposure, ÷1000 sum insured, normalise labels, dedupe)"
+      ],
+      "other": "",
+      "notes": ""
+    },
+    {
+      "rank": 12,
+      "id": "ai",
+      "title": "How we show effective, verified AI use (choose all that apply)",
+      "impact": "Judging (25 %)",
+      "chosen": [
+        "C. Automated tests (pytest) for data fixes, leakage and submission format"
+      ],
+      "other": "",
+      "notes": ""
+    }
+  ]
+}
