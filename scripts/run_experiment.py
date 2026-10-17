@@ -37,12 +37,13 @@ def main():
     res = pipeline.load(a.exp) if a.reuse else pipeline.run(a.exp, cfg, holdout=not a.no_holdout)
     path = sub.write(pipeline.test_predictions(res), a.exp)
     cvx = res.get("cv_nested", res["cv"])
-    pred, sd = lbmodel.predict(cvx)
+    lbm = lbmodel.fit()
+    pred, sd = lbmodel.predict(cvx, lbm)
     explog.record(res, cfg["desc"], cfg["proposer"], file=path.name,
-                  verification="pytest gate + 5-fold CV + 2023 holdout", lb_pred=round(pred, 5))
-    print("  " + lbmodel.verdict(cvx), flush=True)
+                  verification="pytest gate + 5-fold CV + 2023 holdout", lb_pred=round(pred, 5) if pred == pred else "")
+    print("  " + lbmodel.verdict(cvx, lbm), flush=True)
     if a.submit:
-        if not (a.approved or (a.auto and lbmodel.auto_ok(cvx))):
+        if not (a.approved or (a.auto and lbmodel.auto_ok(cvx, lbm))):
             raise SystemExit("not submitting: needs the user's approval (--approved), "
                              "or --auto with predicted LB >= 5% above the current best")
         sub.run_tests()

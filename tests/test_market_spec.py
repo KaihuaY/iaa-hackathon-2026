@@ -162,3 +162,57 @@ def test_env_var_selects_spec_registered_later(monkeypatch):
     monkeypatch.setenv("IAA_MARKET", "nope")
     with pytest.raises(KeyError):
         ms.get_spec()
+
+
+# ---------------------------------------------------------------- phase C: market-aware experiment log and LB predictor
+def _res(name, cv):
+    return {"name": name, "cv": cv, "lines": {"motor": {"cv": cv}}, "holdout": float("nan"), "cfg": {}}
+
+
+@pytest.fixture
+def tmp_log(tmp_path, monkeypatch):
+    import explog
+    monkeypatch.setattr(explog, "LOG", tmp_path / "log.csv")
+    monkeypatch.setattr(explog, "MD", tmp_path / "log.md")
+    return explog
+
+
+def test_record_sets_market(tmp_log):
+    ms.use_spec(replace(ms.PART1, name="fake_mkt"))
+    tmp_log.record(_res("A", 0.1), "d", "AI")
+    ms.use_spec("part1")
+    tmp_log.record(_res("A", 0.2), "d", "AI")           # same exp name in another market must not overwrite
+    df = pd.read_csv(tmp_log.LOG)
+    assert sorted(df.market) == ["fake_mkt", "part1"] and list(df.columns)[-1] == "market"
+
+
+def test_legacy_rows_count_as_part1(tmp_log):
+    pd.DataFrame({"exp": ["old"], "cv": [0.1], "lb_public": [0.1], "decision": [""]}).to_csv(tmp_log.LOG, index=False)
+    assert tmp_log.read_log().market.tolist() == ["part1"]
+
+
+def _hist(market, n):
+    cv = np.linspace(0.10, 0.14, n)
+    return pd.DataFrame({"exp": [f"{market}{i}" for i in range(n)], "cv": cv, "cv_nested": np.nan, "lb_public": 0.9 * cv + 0.01,
+                         "decision": "", "market": market})
+
+
+def test_lbmodel_ignores_other_markets():
+    import lbmodel
+    log = pd.concat([_hist("part1", 5), _hist("fake_mkt", 2)], ignore_index=True)
+    ms.use_spec("part1")
+    assert lbmodel.fit(log)["n"] == 5
+    ms.use_spec(replace(ms.PART1, name="fake_mkt"))
+    assert lbmodel.fit(log)["n"] == 2                    # below the 3-row minimum
+    legacy = log.drop(columns="market").iloc[:5]
+    ms.use_spec("part1")
+    assert lbmodel.fit(legacy)["n"] == 5                 # no market column: all part1
+
+
+def test_lbmodel_verdict_without_history():
+    import lbmodel
+    ms.use_spec(replace(ms.PART1, name="fake_mkt"))
+    m = lbmodel.fit(_hist("part1", 6))
+    assert m["n"] == 0
+    assert "no LB history for this market yet" in lbmodel.verdict(0.2, m)
+    assert not lbmodel.auto_ok(0.5, m)
