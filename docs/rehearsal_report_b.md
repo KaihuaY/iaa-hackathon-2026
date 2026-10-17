@@ -266,3 +266,22 @@ Max PSI 8.3095; shift (>0.25): 4, watch (0.1-0.25): 0, columns compared: 88.
    evidence: `portfolio_summary: motor pure_premium new=2.723e+04 ref=544.7`
 58. [ ] training years are [2019, 2020, 2021, 2022] (Part 1: 2021-2024): revisit backtest folds and year trend  
    evidence: `portfolio_summary: train years`
+
+## Dress-rehearsal run log, phase B (17 Oct 2026, after the fixes)
+
+Fixes applied after the first run (see `docs/rehearsal_report.md`, "Dress-rehearsal run log"): (1) the env-selected spec is
+resolved lazily so `IAA_MARKET` can pick a market registered later in `src/market_spec.py`; (2) `MarketSpec.column_aliases`
+renames new column names to the canonical Part 1 names at load time (`age_driver` -> `driver_age`); (3) missing columns are
+tolerated (logged once) in cleaning, enrichment, history features, segment loading and the credibility layer; (4) the
+readiness report's sum-insured anomaly check uses the active spec's currency threshold.
+
+| Step (IAA_MARKET=rehearsal) | Outcome |
+|---|---|
+| `features.build_base(refresh=True)` | OK; cache written under `experiments/cache/rehearsal/` only: train_motor (979,968 × 121), train_buildings (707,726 × 108), claims 137,122 |
+| `pipeline.quick("rehearsal_L17", L17_tuned)` | OK; quick 80/20 D²: motor 0.1209, buildings 0.1126, overall 0.1183 |
+| `new_market_report.py data/rehearsal --ref data/raw/public` | OK; currency-aware check now flags 0.20 % of buildings rows (the genuine ×1000 errors), not 60 % |
+| `pytest tests` with `IAA_MARKET` unset | 57 passed, including `test_golden_part1` (Part 1 outputs byte-identical) |
+
+Still hard-coded (to watch on the real Part 2 data): the readiness tool's reference schema and column lists are Part 1 by
+design; `experience_features` requires `customer_id`; claims cleaning needs `line`, `peril`, `net_incurred`, `status`,
+`incurred_to_date`; `src/market.py` fixes `LINES` at import.
