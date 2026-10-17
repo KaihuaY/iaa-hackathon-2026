@@ -96,39 +96,57 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
     return res
 
 
-def _best_weight(y, pa, pb, grid=np.linspace(0, 1, 21)):
-    scores = [d2_tweedie(y, g * pa + (1 - g) * pb) for g in grid]
-    return float(grid[int(np.argmax(scores))]), max(scores)
+def _simplex(k: int, step: float = 0.05):
+    """All weight vectors of length k on a `step` grid that sum to 1."""
+    n = int(round(1 / step))
+    if k == 1:
+        return [np.array([1.0])]
+    out = []
+    for i in range(n + 1):
+        for rest in _simplex(k - 1, step):
+            v = np.r_[i / n, np.asarray(rest) * (1 - i / n)]
+            out.append(v)
+    return [v for v in {tuple(np.round(v, 6)) for v in out} if abs(sum(v) - 1) < 1e-6 and min(v) >= -1e-9]
+
+
+def _best_weights(y, P, grid):
+    scores = [d2_tweedie(y, P @ np.asarray(g)) for g in grid]
+    i = int(np.argmax(scores))
+    return np.asarray(grid[i]), scores[i]
 
 
 def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
-    """Per-line weight w on cfg['parts'][0] vs (1-w) on parts[1], chosen on OOF D².
+    """Per-line weights over cfg['parts'] (2 or more single models) on a simplex grid, chosen on OOF D².
 
-    Also reports nested CV: the weight is chosen on 4 folds and applied to the 5th (same GroupKFold by policy as the
+    Also reports nested CV: weights are chosen on 4 folds and applied to the 5th (same GroupKFold by policy as the
     models), so the blend's own weight choice cannot flatter its score."""
-    a, b = (load(p) for p in cfg["parts"])
-    for part in (a, b):   # a blend part's OOF used full-sample weights, which would flatter the nested score
+    parts = [load(p) for p in cfg["parts"]]
+    for part in parts:    # a blend part's OOF used full-sample weights, which would flatter the nested score
         assert part["cfg"]["model"] != "blend", "blend parts must be single models"
+    grid = _simplex(len(parts), cfg.get("step", 0.05 if len(parts) <= 3 else 0.1))
     res = {"name": name, "cfg": cfg, "lines": {}}
     nested_y, nested_p = [], []
     for line in LINES:
-        la, lb = a["lines"][line], b["lines"][line]
-        y, pa, pb = la["y_eval"], la["oof"], lb["oof"]
-        g, score = _best_weight(y, pa, pb)
+        L = [pt["lines"][line] for pt in parts]
+        y = L[0]["y_eval"]
         ids = pd.read_parquet(CACHE / f"train_{line}.parquet", columns=["row_id", "policy_id"])
-        groups = ids.policy_id.values
-        assert (la["row_id"] == lb["row_id"]).all() and (la["row_id"] == ids.row_id.values).all(), "OOF rows misaligned"
-        assert (la["test_row_id"] == lb["test_row_id"]).all(), "test rows misaligned"
+        for l in L:
+            assert (l["row_id"] == ids.row_id.values).all(), "OOF rows misaligned"
+            assert (l["test_row_id"] == L[0]["test_row_id"]).all(), "test rows misaligned"
+        P = np.column_stack([l["oof"] for l in L])
+        T = np.column_stack([l["test_pred"] for l in L])
+        w, score = _best_weights(y, P, grid)
         nest = np.zeros_like(y, dtype=float)
-        for tr_idx, va_idx in GroupKFold(folds).split(y, groups=groups):
-            gk, _ = _best_weight(y[tr_idx], pa[tr_idx], pb[tr_idx])
-            nest[va_idx] = gk * pa[va_idx] + (1 - gk) * pb[va_idx]
+        for tr_idx, va_idx in GroupKFold(folds).split(y, groups=ids.policy_id.values):
+            wk, _ = _best_weights(y[tr_idx], P[tr_idx], grid)
+            nest[va_idx] = P[va_idx] @ wk
         nested_y.append(y)
         nested_p.append(nest)
-        res["lines"][line] = {**la, "oof": g * pa + (1 - g) * pb,
-                              "test_pred": g * la["test_pred"] + (1 - g) * lb["test_pred"],
-                              "cv": score, "cv_nested": d2_tweedie(y, nest), "holdout": np.nan, "weight": g}
-        print(f"  {line:9s} weight on {cfg['parts'][0]} = {g:.2f} | CV D2 {score:.4f} | nested {res['lines'][line]['cv_nested']:.4f}")
+        res["lines"][line] = {**L[0], "oof": P @ w, "test_pred": T @ w, "cv": score,
+                              "cv_nested": d2_tweedie(y, nest), "holdout": np.nan,
+                              "weight": float(w[0]), "weights": dict(zip(cfg["parts"], map(float, w)))}
+        wtxt = ", ".join(f"{k}={v:.2f}" for k, v in res["lines"][line]["weights"].items())
+        print(f"  {line:9s} weights {wtxt} | CV D2 {score:.4f} | nested {res['lines'][line]['cv_nested']:.4f}", flush=True)
     _summarise(res)
     res["cv_nested"] = d2_tweedie(np.concatenate(nested_y), np.concatenate(nested_p))
     print(f"  OVERALL   nested CV D2 {res['cv_nested']:.4f}")
