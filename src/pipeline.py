@@ -11,7 +11,7 @@ from data import LINES
 from features import CACHE, build_base, model_matrix
 from metrics import d2_tweedie
 from models import make
-from target import prepare_target
+from target import peril_matrix, prepare_target
 
 RESULTS = Path(__file__).resolve().parents[1] / "experiments" / "results"
 
@@ -25,9 +25,18 @@ def _line_data(base, line, cfg):
     return tr, te, tgt, info, X, Xt
 
 
+def _aux(cfg, base, line, tr, tgt, info):
+    """Extra per-row targets: claim counts (freq x sev) or the per-peril cost matrix (per-peril models)."""
+    if cfg["model"] == "perperil":
+        M, perils = peril_matrix(tr, base["claims"], line, tgt, info)
+        print(f"  {line}: perils modelled {perils}", flush=True)
+        return M
+    return tr.claim_count.values
+
+
 def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None, cv_=None):
     m = make(cfg["model"], cfg.get("params"))
-    if cfg["model"] == "freqsev":
+    if cfg["model"] in ("freqsev", "perperil"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter, counts=c, counts_val=cv_)
     elif cfg["model"] in ("lgbm", "glmboost"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter)
@@ -44,7 +53,8 @@ def quick(name: str, cfg: dict, seed: int = 11) -> dict:
     ys, ps, out = [], [], {}
     for line in LINES:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
-        y, w, e, c = tgt.y_train.values, tgt.w.values, tr.exposure.values, tr.claim_count.values
+        y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
+        c = _aux(cfg, base, line, tr, tgt, info)
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         a, b = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(X, groups=tr.policy_id))
         _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
@@ -65,7 +75,8 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
     res = {"name": name, "cfg": cfg, "lines": {}}
     for line in LINES:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
-        y, w, e, c = tgt.y_train.values, tgt.w.values, tr.exposure.values, tr.claim_count.values
+        y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
+        c = _aux(cfg, base, line, tr, tgt, info)
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         oof, iters = np.zeros(len(tr)), []
         for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr.policy_id)):

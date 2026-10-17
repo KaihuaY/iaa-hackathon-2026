@@ -138,6 +138,38 @@ class FreqSev:
         return self.freq.importance()
 
 
+class PerPeril:
+    """One Tweedie GBM per peril (claims-cost matrix passed as `counts`), predictions summed, then rebalanced."""
+
+    def __init__(self, params=None):
+        self.params = dict(params or {})
+
+    def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None,
+            counts=None, counts_val=None):
+        M, Mv = counts, counts_val
+        assert M is not None and M.ndim == 2, "PerPeril needs the per-peril cost matrix"
+        self.models, its = [], []
+        for j in range(M.shape[1]):
+            m = LGBMTweedie(self.params)
+            if X_val is not None and n_iter is None and Mv is not None:
+                m.fit(X, M[:, j], w, expo, X_val, Mv[:, j], w_val, expo_val)
+            else:
+                m.fit(X, M[:, j], w, expo, n_iter=n_iter or 300)
+            self.models.append(m)
+            its.append(m.best_iter)
+        self.peril_iters = its
+        self.best_iter = int(np.mean(its))
+        self.scale = 1.0
+        self.scale = float(np.sum(w * y) / np.sum(w * self.predict(X, expo)))
+        return self
+
+    def predict(self, X, expo):
+        return self.scale * np.sum([m.predict(X, expo) for m in self.models], axis=0)
+
+    def importance(self):
+        return pd.concat([m.importance() for m in self.models], axis=1).sum(axis=1).sort_values(ascending=False)
+
+
 class GLMBoost:
     """GLM first, then a regularised GBM boosting from the GLM's log-prediction (learns what the GLM misses)."""
 
@@ -164,4 +196,4 @@ class GLMBoost:
 def make(kind: str, params: dict | None = None):
     return {"const": lambda: ConstRate(), "lgbm": lambda: LGBMTweedie(params),
             "glm": lambda: GLMTweedie(**(params or {})), "glmboost": lambda: GLMBoost(params),
-            "freqsev": lambda: FreqSev(params)}[kind]()
+            "freqsev": lambda: FreqSev(params), "perperil": lambda: PerPeril(params)}[kind]()

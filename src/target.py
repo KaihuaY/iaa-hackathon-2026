@@ -100,6 +100,25 @@ def _ibnr(df, claims, lc, line, cost, cap):
     return freq * sev * _row_integral(df, _daily((1 - comp) * rel)) / 365
 
 
+def peril_matrix(pol: pd.DataFrame, claims: pd.DataFrame, line: str, tgt: pd.DataFrame, info: dict,
+                 min_claims: int = 1000) -> tuple[np.ndarray, list]:
+    """Per-row training cost split by peril, consistent with y_train (same cap, trend; IBNR spread by peril share).
+
+    Perils with fewer than `min_claims` (default 1000) claims are pooled into 'other' (too thin to model alone)."""
+    lc = claims[(claims.line == line) & claims.row_id.notna()].copy()
+    cost = lc.net_incurred.where(~lc.claim_id.isin(SUSPECT_CLAIMS), lc.paid_to_date)
+    if info.get("cap"):
+        cost = cost.clip(upper=info["cap"])
+    counts = lc.peril.value_counts()
+    lc["grp"] = lc.peril.where(lc.peril.map(counts) >= min_claims, "other")
+    tab = cost.groupby([lc.row_id, lc.grp]).sum().unstack(fill_value=0.0)
+    tab = tab.reindex(pol.row_id.values).fillna(0.0)
+    share = tab.sum() / tab.values.sum()
+    trend = pol.period_start.dt.year.map(info["trend"]).values
+    M = tab.values * trend[:, None] + (tgt.ibnr.values * trend)[:, None] * share.values[None, :]
+    return M, list(tab.columns)
+
+
 def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, line: str, cfg: dict) -> tuple[pd.DataFrame, dict]:
     """Add training label, evaluation label and weight to a line's training rows.
 

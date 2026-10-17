@@ -90,6 +90,9 @@ EXPERIMENTS = {
                         features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "X4_blend3": dict(desc="3-way per-line blend: GLM+boost (B15), Tweedie GBM (L15), freq x sev GBM (F15)",
                       proposer="AI (model diversity)", model="blend", parts=["B15_denoise_mm", "L15_denoise_mm", "F15_freqsev"]),
+    "P15_perperil": dict(desc="Per-peril Tweedie GBMs summed (perils < 1k claims pooled), L15 features and target",
+                         proposer="AI (round-2 card #1A)", model="perperil", target={**FULL_T, "cap_q": 0.99},
+                         features={**HIST_F, "drop": NOISE + ["make_model"]}),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
