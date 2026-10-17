@@ -130,6 +130,12 @@ EXPERIMENTS = {
                     parts=["F17_freqsev", "F17_s101", "F17_s202"]),
     "X6_blend3bag": dict(desc="3-way blend: B15 + seed-bagged L17 + seed-bagged F17", proposer="AI (seed bagging)",
                          model="blend", parts=["B15_denoise_mm", "L17_bag", "F17_bag"]),
+    "X8_blend_cred": dict(desc="3-way blend: B15 (GLM+boost), L20 corrected (credibility layer), F17_bag (freq x sev)",
+                          proposer="AI (global plan steps 1-4)", model="blend", parts=["B15_denoise_mm", "L20_mono_lowreg_cred", "F17_bag"]),
+    "X9_blend_l20": dict(desc="3-way blend: B15, L20 (uncorrected), F17_bag", proposer="AI (ablation of the correction layer)",
+                         model="blend", parts=["B15_denoise_mm", "L20_mono_lowreg", "F17_bag"]),
+    "X10_blend4": dict(desc="4-way blend: B15, L20 corrected, F17_bag, A1 CatBoost (cached predictions from branch advanced-ml)",
+                       proposer="AI", model="blend", step=0.1, parts=["B15_denoise_mm", "L20_mono_lowreg_cred", "F17_bag", "A1_catboost"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
