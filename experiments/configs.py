@@ -133,6 +133,9 @@ EXPERIMENTS = {
                     target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "S1_stack": dict(desc="Stacking meta-learner (Tweedie GLM on log predictions) over B15, L17_bag, F17_bag",
                      proposer="AI (advanced ML)", model="blend", stack=True, parts=["B15_denoise_mm", "L17_bag", "F17_bag"]),
+    "X7_blend4": dict(desc="4-way blend: B15 (GLM+boost), A3 (monotone GBM), F17_bag (freq x sev), A1 (CatBoost)",
+                      proposer="AI (advanced ML)", model="blend", step=0.1,
+                      parts=["B15_denoise_mm", "A3_mono", "F17_bag", "A1_catboost"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
