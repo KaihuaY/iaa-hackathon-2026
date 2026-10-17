@@ -1,0 +1,142 @@
+# IAA AI-Assisted Actuarial Hackathon 2026: Part 1 write-up (draft)
+
+## 1. Summary
+
+- **Task.** Predict the expected ultimate claim cost (risk premium, net of excess and recoveries, repudiated claims excluded) for 626,639 policy-period rows in 2025 across motor, buildings and contents. Metric: Tweedie D² (power 1.5).
+- **Approach.** Clean the planted data errors, build a developed (BF IBNR), capped, 2025-trended target, then fit per-line Tweedie models (a GLM-boosted GBM, a monotone GBM, a frequency x severity GBM and CatBoost) combined by a per-line blend with a small credibility layer.
+- **Validation.** Policy-grouped 5-fold CV, a 2023 holdout, and a CV-to-leaderboard predictor (corr ≈ 0.995, noise ±0.002) that decides what is worth submitting.
+- **Public LB.** Best so far 0.12749 (`X10_blend4`, CV 0.15925, nested CV 0.15904; first on the leaderboard when submitted). The GLM baseline scored 0.10753.
+- **Use of AI.** AI proposed most experiments and wrote most code. Every change passed a pytest gate, CV and human approval, and two independent AI code reviews caught real bugs (`docs/ai_review_log.md`).
+- **Part 2.** The same pipeline is re-run on the emerging-market data, with data quality, development, trend, level and feature stability re-estimated rather than carried over. Part 2 results: [TBD].
+
+## 2. Data understanding and quality
+
+The EDA dashboard (`notebooks/01_eda.py`, section 2) records each problem. `src/data.py` fixes it and logs the row count.
+
+| Issue | Fix (`src/data.py`) | Rows |
+|---|---|---|
+| Claims duplicated under a new `claim_id` | Drop duplicates on all other columns | [TBD] |
+| `customer_id` lost leading zeros | Left-pad to 8 characters | [TBD] |
+| Exposure recorded in days (e.g. 365) | Recompute from period dates | [TBD] |
+| `sum_insured` x1000 unit error (buildings > 5m, contents > 1m) | Divide by 1000 | [TBD] |
+| `construction_type` labels (case, `T`/`W`) | Normalise to four levels | [TBD] |
+| `years_licensed` impossible for `driver_age` | Cap at age minus 17; flag kept | [TBD] |
+
+**Leakage.** Two columns are excluded by construction (`LEAKY_COLS`) and by test. `renewal_decision` exists only in training, and `declined_by_insurer` rows claim at about ten times the normal rate (the insurer declines because of claims). `customer_service_contacts` includes claim-related calls: rows with zero contacts have zero claims, and test values resemble the no-claim rows. `written_premium` is also excluded, by user decision, as an independent technical price is wanted. The diagnostic `L13_prem` scored CV 0.15293 against 0.15209 for `L6_lgbm`; it is kept only as evidence.
+
+**Claim to row matching.** Claims link by `policy_id` only and a policy has several rows (years, mid-term changes). Each claim is attached to the row whose period contains `loss_date` (`attach_claims`). A test asserts every matched claim falls inside its row period.
+
+**2024 immaturity.** Valued at 31 December 2024, December losses are only about 67 to 80 % reported, and 2024 is about 95 % complete by count (EDA section 4). Motor 2024 cost is down about 23 % against frequency down about 10 %, so most of the gap is severity from late large claims and open case estimates. About a quarter of 2024 claims are open. Raw 2024 incurred would teach the model to under-price recent years.
+
+**The suspect claim.** One open motor bodily-injury claim (`CL30973963`) carries an 11.9m case estimate, ten times the next largest. It is treated as a data error: valued at paid-to-date in the evaluation label, capped in the training label, and its excess is not spread into the large-loss loading.
+
+## 3. Target construction (`src/target.py`)
+
+1. **Development to ultimate.** A Bornhuetter-Ferguson IBNR. Each row receives the claims it is expected still to report, from a report-lag completeness curve and a late-claim severity relativity fitted on the mature years 2021 to 2022. Rows with no reported claims also receive IBNR, so nothing depends on a row's own noisy experience.
+2. **Large-loss cap.** A per-line claim cap with the excess returned as a loading. The first choice was the 99.5th percentile (user card #5). Sensitivity runs favoured the 99th (CV +0.0004, holdout +0.0004), while the 99.9th was worse by 0.0009. The loading is segment-specific (motor: cover x age band; home: sum-insured quartile) and credibility-shrunk with K = 200. A residual scan prompted this (third-party-only motor ran at 1.09x). Result in `L19_segload`: motor CV +0.0006, buildings holdout +0.003.
+3. **Trend to 2025.** The user chose the premium change (+3 to 6 %) as the inflation index. CV cannot judge trend because the label already contains it, so a forward level backtest was built (`src/backtest.py`, `scripts/backtest_level.py`): train on years before T with labels trended to T, predict T, and compare the total with developed actuals. Level error was 1.8 % for the premium index against 3.0 % for a claims-based trend, so the claims trend was rejected (`L8_trendB`).
+4. **Maturity weights and exposure.** Rows are weighted by completeness, so 2024 counts for less. Exposure enters as a log offset with `new_business` as a feature, because only new-business rows claim more per exposure year (EDA 8a).
+
+The evaluation label `y_eval` is fixed across experiments (uncapped, developed, premium-trended), so CV scores are comparable.
+
+## 4. Modelling
+
+**Path.** GLM baseline (one Tweedie GLM per line, banded factors, CV 0.1396) to GBM. The first LightGBM scored below the GLM on the leaderboard. Three diagnostics shaped everything after it:
+
+1. **Start-level bug.** Supplying `init_score` disabled LightGBM's `boost_from_average`, so boosting started at 1 cost unit a year and the test mean was 10 to 20 % low. Fixed in `models.py`. A calibration test now requires total predicted within 5 % of actual.
+2. **Drift under heavy regularisation.** The Tweedie GBM chased chance claim-free pockets: in-sample calibration fell from 0.90 to 0.70 in a one-fold diagnostic. Fix: large leaves, slow learning, rebalancing. Later, with drift guarded and monotone constraints in place, regularisation could be relaxed (`L20_mono_lowreg`, minimum leaf 2,000).
+3. **History as a calendar proxy.** Cumulative prior-claims features grew with the calendar year (holdout fell and the test mean jumped in `G5_hist`). Fix: a two-year look-back window, and a test that the window means the same in every year including 2025.
+
+**Feature stability screen.** For each categorical, level claim frequencies in 2021 to 2022 are correlated with 2023 (a genuine factor ranks levels the same way each year). `previous_insurer`, `branch_id`, `email_domain` and `campaign_code` show roughly zero stability. `make_model` (300 levels) scores 0.23. Removing them lifted CV from 0.15253 to 0.15631 (+0.0038) and the 2023 holdout from 0.0995 to 0.1041. Removing line-irrelevant fields (`L16_relevant`) was neutral and gave a simpler model.
+
+**Model families.** Tweedie GBM per line (LightGBM); GLM plus boosting from the GLM (`B15`); frequency (Poisson GBM) x severity (Gamma GBM on cost > 0) (`F17`); CatBoost with ordered target statistics (`A1`). Monotone constraints (excess and no-claims discount down; prior claims and sum insured up) cost nothing in CV (0.15756 against 0.15743) and are actuarially defensible. Training power 1.35 added +0.0003 (`P20_135`).
+
+**Blend.** Per-line weights are chosen on CV and scored by nested CV, where weights are chosen out of fold. A blend of blends is refused. The best family differs by line: the GLM-based model carries the larger weight for motor (0.65 in `X1`), while the standalone GBM is stronger for buildings and contents, where interactions such as soil x dry summer matter.
+
+**Credibility layer.** A Bühlmann experience adjustment plus a ridge segment layer (`src/credibility.py`). Its measured worth is small: +0.0001 nested in the blend (`X8` against `X9`), although an in-sample scan suggested up to +0.006. Kept as a marginal member and reported as such.
+
+**What did not work.**
+
+| Idea | Result | Why |
+|---|---|---|
+| Per-peril GBMs summed | 0.1615 vs 0.1616 (buildings -0.0013) | A single GBM already captures peril signal |
+| PCA on weather (user question) | Neutral | Raw weather kept for interpretability |
+| Stacking meta-learner | Nested 0.1584, same as grid blend | Simpler grid kept |
+| XGBoost | 0.1607 vs 0.1628 | Weaker on every line |
+| Richer claim history by peril | 0.1626 vs 0.1628 | Neutral |
+| Address-level history | Rejected before modelling | Addresses are about 1:1 with policies |
+| Optuna (12 trials) | 0.1639 vs 0.1634 | Within quick-screen noise |
+| Cap at 99.9th percentile | CV -0.0009 | Rejected |
+
+## 5. Validation and trust
+
+- **Grouped 5-fold CV** by `policy_id` across all years (user card #4), so one policy never sits in both train and validation.
+- **2023 holdout** (train 2021 to 2022), used as a second opinion.
+- **CV to LB predictor** (`src/lbmodel.py`): corr ≈ 0.995 across submissions, noise ±0.002. A candidate whose predicted gain is below the noise is not submitted (`X7_blend4` predicted +0.0005; `X11_blend4` +0.0001). Auto-submit requires gain > 0, at least 5 % of |best|, and more than max(0.002, residual sd). A submission without explicit approval is refused, and a test proves it.
+- **Approval gates.** Every submission needs user approval, and the user's modelling decisions (`docs/decisions.json`) set the structure.
+- **Automated tests** (`tests/`):
+
+| Guard | Test |
+|---|---|
+| Metric equals sklearn's Tweedie D² | `test_metric_matches_sklearn` |
+| Cleaning rules, claim de-duplication, customer join | `test_cleaning`, `test_claims_deduplicated`, `test_customer_join_complete` |
+| Leaky columns, targets, ids and `written_premium` absent from features; train/test columns identical | `test_no_leakage_in_features` |
+| History uses prior years only; stable window incl. 2025 | `test_history_uses_only_prior_years`, `test_rich_history_*`, `test_history_window_*`, `test_no_future_information` |
+| Every claim inside its row period | `test_claims_fall_inside_row_period` |
+| Development, loading, trend sane | `test_target_development`, `test_segment_loading`, `test_trend_to_target_year` |
+| Models calibrated (total within 5 %); freq x sev handles nil claims | `test_models_are_calibrated`, `test_freqsev_*` |
+| Submission format (626,639 rows, no negatives) | `test_submission_validation` |
+| Submit gate and LB predictor | `test_lb_predictor_and_submit_gate` |
+| Monotone constraints; credibility layers recover a known effect | `test_monotone_increasing`, `test_segment_layer`, `test_buhlmann` |
+| Level-probe optimum fit | `test_known_parabola`, `test_upward_parabola_clips` |
+
+- **Independent AI reviews** (`docs/ai_review_log.md`). Review 1 (a separate read-only agent on the modelling code) found three bugs (an auto-submit rule with no noise check, a Gamma severity crash on zero-cost claims, a claims trend fitted through one point), two risks now asserted in code (blend-part alignment, blend-of-blend flattering nested CV) and a minor leakage (section 8). Review 2 (the credibility layer, written by a smaller model to a spec) found a scale mismatch that biased the Bühlmann ratio 11 to 24 % low (mean A/P 0.80 before, 0.98 to 0.99 after) and a segment design that fitted stability-screen noise. Unit tests on synthetic data could not have caught either, so real-data sanity prints were added.
+
+## 6. Use of AI
+
+| Stage | What AI did | How it was verified |
+|---|---|---|
+| EDA | Built the dashboard, listed the planted errors, flagged both leakage columns and the 2024 immaturity | Register counts come from code; the user approved the fixes (card #11) |
+| Feature engineering | Proposed experience rating, history windows, the stability screen | History tests; holdout and test-mean checks |
+| Modelling | Proposed and ran the logged experiments; the user set direction through 12 decision cards | Pytest gate, 5-fold CV and 2023 holdout on every run; LB predictor |
+| Diagnostics | Traced the start-level bug, drift and calendar proxy from LB and calibration anomalies | A regression test added for each |
+| Code review | Separate agents reviewed code before first use | Each finding has a fix and, where possible, a test |
+
+Every row of `docs/experiment_log.md` records the proposer (user or AI), the verification and the decision. AI proposals were rejected when they failed: stacking, XGBoost, tuning, per-peril, richer history, claims trend.
+
+**Cases where AI output was wrong and caught.**
+
+1. LightGBM start level (LB below GLM; test mean 10 to 20 % low).
+2. History features that behaved as a calendar proxy (holdout drop).
+3. A 5 % auto-submit rule that could pass a no-better model (review 1).
+4. Gamma severity crashing on nil claims (review 1).
+5. The credibility layer comparing raw reported cost with a developed, trended expectation (review 2).
+6. A quick screen that overstated the CatBoost buildings gain; full CV corrected it (`A1_catboost` note).
+7. The `E3_dev` run, voided because it ran with the start-level bug.
+
+## 7. Results
+
+| Step | Experiment | CV | Public LB |
+|---|---|---|---|
+| Constant rate x exposure | `E0_const` | 0.0892 | 0.0709 |
+| Tweedie GLM, raw labels | `E1_glm` | 0.1396 | 0.1075 |
+| + development, experience, trend, weights | `G6_trend` | 0.1477 | 0.1172 |
+| + GBM boosting from GLM | `B6_boost` | 0.1515 | 0.1197 |
+| Standalone regularised GBM | `L6_lgbm` | 0.1521 | 0.1235 |
+| Per-line blend | `X1_blend` | 0.1552 | 0.1249 |
+| De-noised, tuned, bagged 3-way blend | `X6_blend3bag` | 0.1585 | 0.1263 |
+| 4-way blend + CatBoost + credibility | `X10_blend4` | 0.1593 (nested 0.1590) | **0.1275** |
+
+Per-line CV for `X10`: motor 0.1104, buildings 0.1150, contents 0.1031. CV exceeds LB by a steady margin of about 0.03, which is why the predictor works. `E2_lgbm_bug` (LB 0.0985) is the buggy run and is excluded.
+
+**Calibration evidence.** Synthetic calibration tests (ratio within 0.95 to 1.05), the per-line calibration check in the pipeline, and the test-mean comparison that exposed the start-level bug. Real-data calibration ratios by line: [TBD].
+
+**Plateau analysis.** Late gains were small: de-noising +0.0038, tuned GBMs about +0.001, seed bagging +0.0002, power 1.35 +0.0003, credibility +0.0001. Candidate differences now sit at or below the ±0.002 LB noise. Ceiling (how much variance is policy-level noise) and persistence (how much of a policy's risk repeats year to year) figures: [TBD]. Segment scan: only third-party-only motor (1.09x) gave an actionable residual, and its fix was worth little. Reading: further feature or algorithm work is inside the noise, so effort should go to level (trend) and to adaptation. A leaderboard level probe (`scripts/level_probe.py`: scale a line by 0.95, 1.00, 1.05 and fit a parabola) exists for this; its results: [TBD].
+
+## 8. Limitations and Part 2 plan
+
+- **Mild leakage in target parameters.** Cap, loading, IBNR curves and trend are estimated on all training years, including CV validation rows. They are aggregate parameters, so the effect is judged small (review finding 6), but CV is slightly optimistic. The 2023 holdout and the LB are the independent checks.
+- **Level uncertainty.** The 2025 level rests on one premium index with a backtest error of 1.8 %. 2025 weather is windier (wind index about 10 % above average), an effect on buildings that the trend does not capture.
+- **Immature 2024.** Development curves come from 2021 to 2022 and assume stable reporting behaviour.
+- **Small gains.** The credibility layer and the fourth blend member are marginal and are reported as such.
+- **Part 2 readiness.** The emerging market will differ in mix, level and possibly data quality. Checks to re-run: the data-quality register and cleaning tests; population stability of rating factors against the old market; the stability screen on new categorical fields; the report-lag completeness curve; the forward level backtest and level probe; calibration by line; and the CV-to-LB predictor refitted on new submissions. The pipeline is modular (`src/data.py`, `src/target.py`, `experiments/configs.py`) and estimates its parameters from data. Exceptions: the valuation date and the 2024 completeness constants in `src/credibility.py`, which must be reset. Tests fail loudly on leakage or miscalibration. Readiness tooling results: [TBD].
