@@ -64,21 +64,27 @@ def _row_integral(pol: pd.DataFrame, daily: np.ndarray) -> np.ndarray:
     return cs[e + 1] - cs[s]
 
 
-def trend_index(train: pd.DataFrame, test: pd.DataFrame, method: str, pp_by_year: pd.Series | None = None) -> dict:
-    """Factor taking each training year's cost to the 2025 level."""
+def trend_index(train: pd.DataFrame, test: pd.DataFrame, method: str, pp_by_year: pd.Series | None = None,
+                target_year: int = 2025) -> dict:
+    """Factor taking each training year's cost to the `target_year` level (2025 for submissions; earlier for backtests).
+
+    premium: ratio of mean full-year written premium (target year from test if 2025, else from training rows).
+    claims:  log-linear fit of developed pure premium on years before the target (max 2021-23 to avoid immature 2024).
+    """
     years = [2021, 2022, 2023, 2024]
     if method == "none":
         return {y: 1.0 for y in years}
     if method == "premium":
         full = train[train.exposure > 0.99]
         idx = full.groupby(full.period_start.dt.year).written_premium.mean()
-        idx[2025] = test.loc[test.exposure > 0.99, "written_premium"].mean()
-        return {y: float(idx[2025] / idx[y]) for y in years}
+        if target_year == 2025:
+            idx[2025] = test.loc[test.exposure > 0.99, "written_premium"].mean()
+        return {y: float(idx[target_year] / idx[y]) for y in years}
     if method == "claims":
-        # log-linear fit of developed pure premium on mature-ish years 2021-23
-        pp = pp_by_year.loc[[2021, 2022, 2023]]
+        fit_years = [y for y in (2021, 2022, 2023) if y < target_year]
+        pp = pp_by_year.loc[fit_years]
         slope = np.polyfit(pp.index.values, np.log(pp.values), 1)[0]
-        return {y: float(np.exp(slope * (2025 - y))) for y in years}
+        return {y: float(np.exp(slope * (target_year - y))) for y in years}
     raise ValueError(method)
 
 
@@ -95,8 +101,8 @@ def _ibnr(df, claims, lc, line, cost, cap):
 def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, line: str, cfg: dict) -> tuple[pd.DataFrame, dict]:
     """Add training label, evaluation label and weight to a line's training rows.
 
-    cfg keys: develop (bool), cap_q (float or None), trend ('premium'|'claims'|'none'),
-              open_factor (float), weight_power (float).
+    cfg keys: develop (bool), cap_q (float or None), trend ('premium'|'claims'|'none' or {line: method}),
+              trend_to (target year, default 2025), open_factor (float), weight_power (float).
     y_train follows cfg. y_eval is FIXED across experiments so CV scores are comparable:
     uncapped cost (suspect claim at paid-to-date), developed, premium-trended.
     """
@@ -119,12 +125,15 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
     ibnr_eval = _ibnr(df, claims, lc, line, base, None)
 
     pp_year = (df.rep_train + df.ibnr).groupby(df.year).sum() / df.exposure.groupby(df.year).sum()
-    tf = trend_index(pol, test, cfg.get("trend", "premium"), pp_year)
+    method = cfg.get("trend", "premium")
+    method = method[line] if isinstance(method, dict) else method
+    tf = trend_index(pol, test, method, pp_year, cfg.get("trend_to", 2025))
     tf_eval = trend_index(pol, test, "premium")
     df["y_train"] = (df.rep_train + df.ibnr) * df.year.map(tf)
     df["y_eval"] = (df.rep_eval + ibnr_eval) * df.year.map(tf_eval)
+    df["y_dev"] = df.rep_eval + ibnr_eval            # developed actual, untrended (used by the level backtest)
     wp = cfg.get("weight_power", 0.0)
     df["w"] = df.completeness.clip(lower=0.05) ** wp if wp else 1.0
-    info = {"line": line, "cap": cap, "loading": loading, "trend": tf,
+    info = {"line": line, "cap": cap, "loading": loading, "trend": tf, "trend_method": method,
             "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
-    return df[["row_id", "y_train", "y_eval", "w", "completeness", "ibnr"]], info
+    return df[["row_id", "y_train", "y_eval", "y_dev", "w", "completeness", "ibnr"]], info

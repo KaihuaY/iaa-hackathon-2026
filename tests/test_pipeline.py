@@ -109,6 +109,29 @@ def test_submission_validation():
         validate(s.iloc[:-1])
 
 
+def test_trend_to_target_year(base):
+    from target import trend_index
+    tr, te = base["train_buildings"], base["test_buildings"]
+    for T in (2024, 2025):
+        tf = trend_index(tr, te, "premium", target_year=T)
+        assert tf[2021] > 1.0, "premiums rise, so earlier years scale up"
+        if T == 2024:
+            assert tf[2024] == pytest.approx(1.0)
+
+
+def test_lb_predictor_and_submit_gate():
+    import subprocess
+    import lbmodel
+    m = lbmodel.fit()
+    assert m["corr"] > 0.95 and m["n"] >= 5
+    assert "below noise" in lbmodel.verdict(m["best_cv"] + 0.0001, m)
+    assert "MATERIAL" in lbmodel.verdict(m["best_cv"] + 0.01, m)
+    # submitting without --approved must be refused before anything is uploaded
+    r = subprocess.run([sys.executable, "-P", "-E", str(ROOT / "scripts" / "run_experiment.py"), "X1_blend", "--reuse",
+                        "--submit"], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode != 0 and "approval" in (r.stdout + r.stderr)
+
+
 @pytest.mark.parametrize("kind", ["lgbm", "glm"])
 def test_models_are_calibrated(kind):
     """Total predicted cost must match total actual on training data (catches offset/start-level bugs)."""
