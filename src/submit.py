@@ -36,11 +36,29 @@ def write(sub: pd.DataFrame, name: str) -> Path:
     return path
 
 
+MARKER = ROOT / "experiments" / "logs" / "tests_passed_at"
+
+
+def _code_state() -> str | None:
+    """HEAD commit if src/tests/configs have no uncommitted changes, else None."""
+    git = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    if git("status", "--porcelain", "--", "src", "tests", "experiments/configs.py"):
+        return None
+    return git("rev-parse", "HEAD")
+
+
 def run_tests() -> None:
+    """pytest gate. Skipped only when the suite already passed on this exact, clean commit."""
+    state = _code_state()
+    if state and MARKER.exists() and MARKER.read_text().strip() == state:
+        print(f"  tests already passed on {state[:7]} (code unchanged), gate satisfied")
+        return
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", str(ROOT / "tests")], cwd=ROOT,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise SystemExit("tests failed, not submitting:\n" + r.stdout[-3000:])
+    if state:
+        MARKER.write_text(state)
 
 
 def _kaggle(*args) -> str:
