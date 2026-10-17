@@ -38,7 +38,7 @@ def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None,
     m = make(cfg["model"], cfg.get("params"))
     if cfg["model"] in ("freqsev", "perperil"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter, counts=c, counts_val=cv_)
-    elif cfg["model"] in ("lgbm", "glmboost"):
+    elif cfg["model"] in ("lgbm", "glmboost", "catboost", "xgb"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter)
     else:
         m.fit(X, y, w, e)
@@ -128,6 +128,18 @@ def _best_weights(y, P, grid):
     return np.asarray(grid[i]), scores[i]
 
 
+def _stack_fit(y, P):
+    """Tweedie (p=1.5) GLM of y on log model predictions: mu = exp(a + sum_k b_k log p_k)."""
+    from glum import GeneralizedLinearRegressor, TweedieDistribution
+    Z = np.log(np.clip(P, 1e-6, None))
+    m = GeneralizedLinearRegressor(family=TweedieDistribution(1.5), link="log", alpha=1e-6, l1_ratio=0.0).fit(Z, y)
+    return {"intercept": float(m.intercept_), "coef": np.asarray(m.coef_, float)}
+
+
+def _stack_apply(w, P):
+    return np.exp(w["intercept"] + np.log(np.clip(P, 1e-6, None)) @ w["coef"])
+
+
 def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
     """Per-line weights over cfg['parts'] (2 or more single models) on a simplex grid, chosen on OOF D².
 
@@ -152,16 +164,23 @@ def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
             assert (l["test_row_id"] == L[0]["test_row_id"]).all(), "test rows misaligned"
         P = np.column_stack([l["oof"] for l in L])
         T = np.column_stack([l["test_pred"] for l in L])
-        w, score = _best_weights(y, P, grid)
+        if cfg.get("stack"):       # meta-learner: Tweedie GLM on log predictions (geometric blend + intercept)
+            fit_fn = lambda yy, PP: _stack_fit(yy, PP)
+            apply_fn = _stack_apply
+        else:
+            fit_fn = lambda yy, PP: _best_weights(yy, PP, grid)[0]
+            apply_fn = lambda w_, PP: PP @ w_
+        w = fit_fn(y, P)
+        score = d2_tweedie(y, apply_fn(w, P))
         nest = np.zeros_like(y, dtype=float)
         for tr_idx, va_idx in GroupKFold(folds).split(y, groups=ids.policy_id.values):
-            wk, _ = _best_weights(y[tr_idx], P[tr_idx], grid)
-            nest[va_idx] = P[va_idx] @ wk
+            nest[va_idx] = apply_fn(fit_fn(y[tr_idx], P[tr_idx]), P[va_idx])
         nested_y.append(y)
         nested_p.append(nest)
-        res["lines"][line] = {**L[0], "oof": P @ w, "test_pred": T @ w, "cv": score,
+        wv = w["coef"] if cfg.get("stack") else w
+        res["lines"][line] = {**L[0], "oof": apply_fn(w, P), "test_pred": apply_fn(w, T), "cv": score,
                               "cv_nested": d2_tweedie(y, nest), "holdout": np.nan,
-                              "weight": float(w[0]), "weights": dict(zip(cfg["parts"], map(float, w)))}
+                              "weight": float(wv[0]), "weights": dict(zip(cfg["parts"], map(float, wv)))}
         wtxt = ", ".join(f"{k}={v:.2f}" for k, v in res["lines"][line]["weights"].items())
         print(f"  {line:9s} weights {wtxt} | CV D2 {score:.4f} | nested {res['lines'][line]['cv_nested']:.4f}", flush=True)
     _summarise(res)

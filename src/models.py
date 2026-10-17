@@ -201,4 +201,10 @@ class GLMBoost:
 def make(kind: str, params: dict | None = None):
     return {"const": lambda: ConstRate(), "lgbm": lambda: LGBMTweedie(params),
             "glm": lambda: GLMTweedie(**(params or {})), "glmboost": lambda: GLMBoost(params),
-            "freqsev": lambda: FreqSev(params), "perperil": lambda: PerPeril(params)}[kind]()
+            "freqsev": lambda: FreqSev(params), "perperil": lambda: PerPeril(params),
+            "catboost": lambda: _adv("CatBoostTweedie", params), "xgb": lambda: _adv("XGBTweedie", params)}[kind]()
+
+
+def _adv(name, params):
+    import models_adv
+    return getattr(models_adv, name)(params)
