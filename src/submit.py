@@ -38,13 +38,14 @@ def write(sub: pd.DataFrame, name: str) -> Path:
 
 def run_tests() -> None:
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", str(ROOT / "tests")], cwd=ROOT,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise SystemExit("tests failed, not submitting:\n" + r.stdout[-3000:])
 
 
 def _kaggle(*args) -> str:
-    r = subprocess.run([sys.executable, "-m", "kaggle", "competitions", *args], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "-m", "kaggle", "competitions", *args], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError(r.stderr[-2000:] or r.stdout[-2000:])
     return r.stdout
