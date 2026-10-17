@@ -30,3 +30,14 @@ that nothing can be submitted without explicit approval or the 5 % rule.
 | Tweedie GBM drifted low by chasing chance claim-free pockets | One-fold diagnostic: in-sample calibration 0.90 → 0.70 | Large leaves, slow learning, rebalancing |
 | Cumulative claim history acted as a calendar-year proxy | Holdout drop and test-mean jump in G5 | 2-year look-back window; stability test |
 | Noise features (`previous_insurer` etc.) ranked as important | Year-to-year stability screen | Features removed: CV +0.004 |
+
+## 2026-10-17 · Review 2: credibility correction layer (code written by a smaller model to a spec; reviewed before first run)
+
+| # | Finding | Severity | Fix | Evidence |
+|---|---|---|---|---|
+| 1 | Bühlmann actual `A` was raw reported claim cost while expected `P` was on the developed, trended scale, so `A/P` was biased 11–24 % low and the test rows (longest history) would have been pushed down hardest | Bug | `A` built from the evaluation target (same scale), then rescaled so the population ratio is 1 | Sanity print of mean `A/P`: 0.80 before, 0.98–0.99 after |
+| 2 | Segment design included ~80 `make_model` / `previous_insurer` level columns the stability screen had classed as noise; they forced the ridge penalty to its maximum and shrank the real indicators too | Design | Structural indicators only by default; levels opt-in (`--levels`) | Nested D² falls when levels are included |
+| 3 | Unit tests passed on synthetic data with no trend, so neither issue could be caught by tests alone | Process | Real-data sanity prints added to the run | — |
+
+Outcome: correction layer worth +0.0001 nested (in-sample scan had suggested up to +0.006; the rare-segment deviations are
+mostly policy-level noise). Kept as a marginal blend member.

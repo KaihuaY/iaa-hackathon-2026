@@ -10,3 +10,5 @@ reports/*.html
 submissions/
 experiments/*.pkl
 experiments/cache/
+experiments/results/
+experiments/logs/
