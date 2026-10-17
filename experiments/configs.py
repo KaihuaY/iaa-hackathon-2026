@@ -106,6 +106,18 @@ EXPERIMENTS = {
                          proposer="AI (new signal: richer experience rating)", model="lgbm", params=TUNED,
                          target={**FULL_T, "cap_q": 0.99},
                          features={**HIST_F, "rich_history": True, "drop": NOISE + ["make_model"]}),
+    # Seed bagging: same models, different random seeds, averaged (variance reduction)
+    **{f"L17_s{s}": dict(desc=f"L17 with seed {s}", proposer="AI (seed bagging)", model="lgbm", params={**TUNED, "seed": s},
+                         target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}) for s in (101, 202)},
+    **{f"F17_s{s}": dict(desc=f"F17 with seed {s}", proposer="AI (seed bagging)", model="freqsev",
+                         params={"freq": {**TUNED, "seed": s}, "sev": {"seed": s}},
+                         target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}) for s in (101, 202)},
+    "L17_bag": dict(desc="L17 averaged over 3 seeds", proposer="AI (seed bagging)", model="blend", average=True,
+                    parts=["L17_tuned", "L17_s101", "L17_s202"]),
+    "F17_bag": dict(desc="F17 averaged over 3 seeds", proposer="AI (seed bagging)", model="blend", average=True,
+                    parts=["F17_freqsev", "F17_s101", "F17_s202"]),
+    "X6_blend3bag": dict(desc="3-way blend: B15 + seed-bagged L17 + seed-bagged F17", proposer="AI (seed bagging)",
+                         model="blend", parts=["B15_denoise_mm", "L17_bag", "F17_bag"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})

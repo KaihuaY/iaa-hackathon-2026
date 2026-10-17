@@ -133,8 +133,12 @@ def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
     models), so the blend's own weight choice cannot flatter its score."""
     parts = [load(p) for p in cfg["parts"]]
     for part in parts:    # a blend part's OOF used full-sample weights, which would flatter the nested score
-        assert part["cfg"]["model"] != "blend", "blend parts must be single models"
-    grid = _simplex(len(parts), cfg.get("step", 0.05 if len(parts) <= 3 else 0.1))
+        # equal-weight seed averages choose nothing from the data, so they are allowed as parts
+        assert part["cfg"]["model"] != "blend" or part["cfg"].get("average"), "blend parts must be single models"
+    if cfg.get("average"):        # seed bagging: fixed equal weights, nothing chosen on the data
+        grid = [np.full(len(parts), 1 / len(parts))]
+    else:
+        grid = _simplex(len(parts), cfg.get("step", 0.05 if len(parts) <= 3 else 0.1))
     res = {"name": name, "cfg": cfg, "lines": {}}
     nested_y, nested_p = [], []
     for line in LINES:
