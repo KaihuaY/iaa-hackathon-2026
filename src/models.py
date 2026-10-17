@@ -26,9 +26,12 @@ class LGBMTweedie:
         self.best_iter = None
 
     def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None):
-        dtr = lgb.Dataset(X, y, weight=w, init_score=np.log(expo), categorical_feature="auto", free_raw_data=False)
+        # An init_score disables LightGBM's boost_from_average, so start from the average log-rate ourselves;
+        # otherwise boosting starts at rate 1 CU/year and early stopping halts it far below the right level.
+        self.base = float(np.log(np.sum(w * y) / np.sum(w * expo)))
+        dtr = lgb.Dataset(X, y, weight=w, init_score=self.base + np.log(expo), categorical_feature="auto", free_raw_data=False)
         if X_val is not None and n_iter is None:
-            dva = lgb.Dataset(X_val, y_val, weight=w_val, init_score=np.log(expo_val), reference=dtr)
+            dva = lgb.Dataset(X_val, y_val, weight=w_val, init_score=self.base + np.log(expo_val), reference=dtr)
             self.model = lgb.train(self.params, dtr, self.rounds, valid_sets=[dva],
                                    callbacks=[lgb.early_stopping(self.early_stop, verbose=False)])
             self.best_iter = self.model.best_iteration
@@ -38,7 +41,7 @@ class LGBMTweedie:
         return self
 
     def predict(self, X, expo):
-        return np.exp(self.model.predict(X, num_iteration=self.best_iter, raw_score=True) + np.log(expo))
+        return np.exp(self.model.predict(X, num_iteration=self.best_iter, raw_score=True) + self.base + np.log(expo))
 
     def importance(self):
         return pd.Series(self.model.feature_importance("gain"), index=self.model.feature_name()).sort_values(ascending=False)

@@ -49,6 +49,7 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
             oof[b] = p * load
             iters.append(getattr(m, "best_iter", None))
         cv = d2_tweedie(tgt.y_eval, oof)
+        calib = float(oof.sum() / tgt.y_eval.sum())          # predicted / actual total cost (guardrail: ~1)
         ho = np.nan
         if holdout:
             yr = tr.period_start.dt.year.values
@@ -60,10 +61,10 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
         m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full)
         imp = m.importance().head(25).to_dict() if hasattr(m, "importance") else {}
         res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
-                              "test_row_id": te.row_id.values, "test_pred": pt * load, "cv": cv, "holdout": ho,
+                              "test_row_id": te.row_id.values, "test_pred": pt * load, "cv": cv, "holdout": ho, "calibration": calib,
                               "info": info, "iters": iters, "importance": imp}
         if verbose:
-            print(f"  {line:9s} CV D2 {cv:.4f} | 2023 holdout {ho:.4f} | iters {iters} | loading {load:.3f} "
+            print(f"  {line:9s} CV D2 {cv:.4f} | 2023 holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
                   f"| test mean {np.mean(pt * load):,.1f}", flush=True)
     _summarise(res)
     res["minutes"] = (time.time() - t0) / 60

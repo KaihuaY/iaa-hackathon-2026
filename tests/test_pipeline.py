@@ -96,3 +96,19 @@ def test_submission_validation():
         validate(s.assign(prediction=-1.0))
     with pytest.raises(AssertionError):
         validate(s.iloc[:-1])
+
+
+@pytest.mark.parametrize("kind", ["lgbm", "glm"])
+def test_models_are_calibrated(kind):
+    """Total predicted cost must match total actual on training data (catches offset/start-level bugs)."""
+    from models import make
+    rng = np.random.default_rng(1)
+    n = 20000
+    X = pd.DataFrame({"a": rng.normal(size=n), "b": pd.Categorical(rng.choice(list("xyz"), n))})
+    expo = rng.uniform(0.1, 1.0, n)
+    mu = 500 * expo * np.exp(0.3 * X.a)
+    y = rng.poisson(mu / 4000) * rng.gamma(2, 2000, n)
+    params = {"learning_rate": 0.1} if kind == "lgbm" else None
+    m = make(kind, params).fit(X, y, np.ones(n), expo, n_iter=50) if kind == "lgbm" else make(kind).fit(X, y, np.ones(n), expo)
+    ratio = m.predict(X, expo).sum() / y.sum()
+    assert 0.95 < ratio < 1.05, ratio
