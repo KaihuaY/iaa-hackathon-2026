@@ -85,6 +85,7 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
         drop |= {c for c in train.columns if c.startswith(("pol_", "cust_")) or c == "lines_held"}
     if not cfg.get("premium", False):
         drop.add("written_premium")
+    drop |= set(cfg.get("drop", []))
     cols = [c for c in train.columns if c not in drop and c in test.columns]
     X, Xt = train[cols].copy(), test[cols].copy()
     if cfg.get("hist_nan_2021", False):

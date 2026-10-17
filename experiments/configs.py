@@ -5,6 +5,8 @@ DEV = {**RAW, "develop": True}
 DEV_CAP = {**DEV, "cap_q": 0.995}
 FULL_T = {**DEV_CAP, "trend": "premium", "weight_power": 1.0}
 
+NOISE = ["previous_insurer", "branch_id", "email_domain", "campaign_code"]
+
 BASE_F = {"history": False}
 HIST_F = {"history": True}
 
@@ -60,6 +62,15 @@ EXPERIMENTS = {
                       model="glmboost", target={**FULL_T, "cap_q": 0.99}, features=HIST_F),
     "X2_blend": dict(desc="Per-line blend of B10 and L10 (both cap 99%)", proposer="user (#9) + AI", model="blend",
                      parts=["B10_cap99", "L10_cap99"]),
+    # Noise-feature removal (stability screen 17 Oct: level frequencies uncorrelated year to year)
+    "L14_denoise": dict(desc="L10 minus noise features (previous_insurer, branch_id, email_domain, campaign_code)",
+                        proposer="AI (feature stability screen)", model="lgbm", target={**FULL_T, "cap_q": 0.99},
+                        features={**HIST_F, "drop": NOISE}),
+    "L15_denoise_mm": dict(desc="L14 also without make_model (300 levels, stability 0.23)",
+                           proposer="AI (feature stability screen)", model="lgbm", target={**FULL_T, "cap_q": 0.99},
+                           features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "B14_denoise": dict(desc="B10 (GLM+boost) minus noise features", proposer="AI (feature stability screen)",
+                        model="glmboost", target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE}),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
