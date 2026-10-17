@@ -12,3 +12,5 @@ experiments/*.pkl
 experiments/cache/
 experiments/results/
 experiments/logs/
+.claude/
+data/rehearsal/
