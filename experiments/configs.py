@@ -142,6 +142,8 @@ EXPERIMENTS = {
                                                                      "tweedie_variance_power": pw},
                                                target={**FULL_T, "cap_q": 0.99, "loading": "segment"},
                                                features={**HIST_F, "drop": NOISE + ["make_model"]}) for pw in (1.2, 1.35, 1.65, 1.8)},
+    "X11_blend4": dict(desc="4-way blend: B15, P20_135 corrected (power 1.35 + credibility layer), F17_bag, A1 CatBoost",
+                       proposer="AI", model="blend", step=0.1, parts=["B15_denoise_mm", "P20_135_cred", "F17_bag", "A1_catboost"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
