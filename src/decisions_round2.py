@@ -39,11 +39,11 @@ DECISIONS = [
     },
     {
         "id": "submit_now", "impact": "High", "multi": False,
-        "title": "Submit X3 (de-noised blend)? Predicted LB 0.1267 vs best 0.1249",
-        "why": "Biggest local gain since blending: nested CV +0.0022, every line up, GBM holdout +0.005. "
-               "X2 (cap 99 %, +0.0001) was not worth a submission and was skipped.",
+        "title": "Submit X4 (3-way de-noised blend)? Predicted LB 0.1269 vs best 0.1249 (+1.6 %)",
+        "why": "X4 = GLM+boost + Tweedie GBM + frequency x severity GBM, noise features removed. Nested CV 0.1577 vs X1 0.1552. "
+               "Below the 5 % auto-submit bar (needs predicted 0.1311). You held X3 (+1.5 %) earlier to keep stacking.",
         "options": [
-            {"key": "A", "label": "Yes, submit X3 (1 submission)",
+            {"key": "A", "label": "Yes, submit X4 (1 submission)",
              "pros": "Gain is consistent across lines and on the 2023 holdout, with a clear mechanism (noise features removed); "
                      "removing noise should also help on the private leaderboard.",
              "cons": "Predicted gain (+0.0018) sits just under the ±0.002 noise band.", "rec": True},
