@@ -6,6 +6,7 @@ DEV_CAP = {**DEV, "cap_q": 0.995}
 FULL_T = {**DEV_CAP, "trend": "premium", "weight_power": 1.0}
 
 NOISE = ["previous_insurer", "branch_id", "email_domain", "campaign_code"]
+TUNED = {"min_data_in_leaf": 8000, "feature_fraction": 0.5}   # quick-screen winner after de-noising (17 Oct)
 # Features with no plausible link to the line's perils and/or unstable year to year (17 Oct screen)
 IRRELEVANT = {
     "motor": ["roof_type", "soil_type", "energy_rating", "basement", "trees_within_5m", "listed_building", "solar_panels",
@@ -93,6 +94,14 @@ EXPERIMENTS = {
     "P15_perperil": dict(desc="Per-peril Tweedie GBMs summed (perils < 1k claims pooled), L15 features and target",
                          proposer="AI (round-2 card #1A)", model="perperil", target={**FULL_T, "cap_q": 0.99},
                          features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "L17_tuned": dict(desc="L15 with tuned GBM (min leaf 8k, feature fraction 0.5); quick screen +0.0012",
+                      proposer="AI (quick-screen tuning)", model="lgbm", params=TUNED,
+                      target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "F17_freqsev": dict(desc="F15 with the same tuned frequency GBM", proposer="AI (quick-screen tuning)",
+                        model="freqsev", params={"freq": TUNED}, target={**FULL_T, "cap_q": 0.99},
+                        features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "X5_blend3": dict(desc="3-way blend: B15 (GLM+boost), L17 (tuned GBM), F17 (tuned freq x sev)",
+                      proposer="AI", model="blend", parts=["B15_denoise_mm", "L17_tuned", "F17_freqsev"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
