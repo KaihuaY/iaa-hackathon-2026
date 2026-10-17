@@ -93,6 +93,14 @@ EXPERIMENTS = {
     "P15_perperil": dict(desc="Per-peril Tweedie GBMs summed (perils < 1k claims pooled), L15 features and target",
                          proposer="AI (round-2 card #1A)", model="perperil", target={**FULL_T, "cap_q": 0.99},
                          features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
+    **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
+                        params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
+       for k, p in {"leaves31": {"num_leaves": 31, "min_data_in_leaf": 10000},
+                    "minleaf40k": {"min_data_in_leaf": 40000},
+                    "minleaf8k": {"min_data_in_leaf": 8000},
+                    "ff05": {"feature_fraction": 0.5},
+                    "l2_200": {"lambda_l2": 200.0}}.items()},
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
