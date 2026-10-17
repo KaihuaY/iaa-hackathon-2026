@@ -170,3 +170,18 @@ def using_spec(spec_or_name):
 
 
 replace = dataclasses.replace
+
+
+# ---- dress-rehearsal market (synthetic, see scripts/make_rehearsal_market.py)
+REHEARSAL = register(dataclasses.replace(
+    PART1, name="rehearsal", competition="none", data_dir="data/rehearsal",
+    lines=("motor", "buildings"), train_years=(2019, 2020, 2021, 2022), test_year=2023,
+    curve_years=(2019, 2020), mature_years=(2019, 2020, 2021, 2022), ref_sev_year=2022,
+    immature_years=(), completeness_last_year={"motor": 1.0, "buildings": 1.0},
+    holdout_year=2022, backtest_years=(2021, 2022), valuation_date="2022-12-31",
+    customer_id_width=None, si_unit_error={"buildings": 5e6 * 50}, expected_rows=None,
+    noise_features=tuple(f for f in PART1.noise_features if f != "previous_insurer"),
+    segments={**{k: v for k, v in PART1.segments.items() if k != "contents"},
+              "motor": {**PART1.segments["motor"], "num": "age_driver"}},
+    irrelevant={k: v for k, v in PART1.irrelevant.items() if k != "contents"},
+))
