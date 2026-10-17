@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 
+from market_spec import get_spec
+
 SKIP = {"row_id", "policy_id", "customer_id", "address_id", "period_start", "period_end", "exposure",
         "claim_count", "claim_cost", "year", "compulsory_excess", "customer_since_year", "year_built"}
 
@@ -58,8 +60,11 @@ def features(df: pd.DataFrame, exclude=()) -> list[str]:
     return [c for c in df.columns if c not in SKIP and c not in exclude and df[c].nunique() > 1]
 
 
-def lag_cdf(claims: pd.DataFrame, years=(2021, 2022), max_days: int = 730) -> pd.DataFrame:
+def lag_cdf(claims: pd.DataFrame, years=None, max_days: int | None = None) -> pd.DataFrame:
     """Share of claims reported within d days of loss, from mature loss years, per line."""
+    spec = get_spec()
+    years = spec.curve_years if years is None else years
+    max_days = spec.max_lag if max_days is None else max_days
     c = claims[claims.loss_date.dt.year.isin(years)]
     lag = (c.report_date - c.loss_date).dt.days
     days = np.arange(0, max_days + 1)

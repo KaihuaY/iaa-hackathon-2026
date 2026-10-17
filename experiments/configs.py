@@ -5,22 +5,24 @@ DEV = {**RAW, "develop": True}
 DEV_CAP = {**DEV, "cap_q": 0.995}
 FULL_T = {**DEV_CAP, "trend": "premium", "weight_power": 1.0}
 
-NOISE = ["previous_insurer", "branch_id", "email_domain", "campaign_code"]
-TUNED = {"min_data_in_leaf": 8000, "feature_fraction": 0.5}   # quick-screen winner after de-noising (17 Oct)
+# Feature lists / tuned params are market assumptions: they come from the active MarketSpec (src/market_spec.py),
+# whose Part 1 defaults are the original constants. A new market overrides them in its spec.
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from market_spec import get_spec  # noqa: E402
+
+_S = get_spec()
+NOISE = list(_S.noise_features)
+TUNED = dict(_S.tuned)               # quick-screen winner after de-noising (17 Oct)
 # Features with no plausible link to the line's perils and/or unstable year to year (17 Oct screen)
-IRRELEVANT = {
-    "motor": ["roof_type", "soil_type", "energy_rating", "basement", "trees_within_5m", "listed_building", "solar_panels",
-              "bedrooms", "vehicle_colour", "flood_zone", "distance_to_river_km", "elevation_m", "property_age"],
-    "contents": ["roof_type", "soil_type"],
-    "buildings": ["document_preference"],
-}
+IRRELEVANT = {k: list(v) for k, v in _S.irrelevant.items()}
 
 BASE_F = {"history": False}
 HIST_F = {"history": True}
 # Directions any pricing actuary would expect (+1 = cost rises with the feature); missing features are ignored.
-MONOTONE = {"voluntary_excess": -1, "ncb_years": -1, "prior_claims_5y": 1, "licence_points": 1, "pol_claims": 1,
-            "cust_claims": 1, "missed_payments_12m": 1, "vehicle_value_group": 1, "annual_mileage": 1,
-            "sum_insured": 1, "flood_zone": 1, "high_value_items": 1}
+MONOTONE = dict(_S.monotone)
 
 EXPERIMENTS = {
     "E0_const": dict(desc="Average cost per line x exposure (pipeline / metric check vs host's 0.072)", proposer="AI",

@@ -7,13 +7,18 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold
 
-from data import LINES
-from features import CACHE, build_base, model_matrix
+from features import build_base, model_matrix
+from market_spec import get_spec
 from metrics import d2_tweedie
 from models import make
 from target import peril_matrix, prepare_target
 
-RESULTS = Path(__file__).resolve().parents[1] / "experiments" / "results"
+
+
+def __getattr__(name):
+    if name == "RESULTS":                       # follows the active MarketSpec (PEP 562)
+        return get_spec().results_path
+    raise AttributeError(f"module 'pipeline' has no attribute {name!r}")
 
 
 def _line_data(base, line, cfg):
@@ -45,18 +50,20 @@ def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None,
     return m, m.predict(Xv, ev)
 
 
-def quick(name: str, cfg: dict, seed: int = 11) -> dict:
+def quick(name: str, cfg: dict, seed: int | None = None) -> dict:
     """Fast screen: one 80/20 split grouped by policy (same split every run), one fit per line. No test predictions.
     Use to triage ideas; anything promising then gets the full 5-fold CV."""
     from sklearn.model_selection import GroupShuffleSplit
+    spec = get_spec()
+    seed = spec.seed if seed is None else seed
     base = build_base()
     ys, ps, out = [], [], {}
-    for line in LINES:
+    for line in spec.lines:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
         y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
         c = _aux(cfg, base, line, tr, tgt, info)
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
-        a, b = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(X, groups=tr.policy_id))
+        a, b = next(GroupShuffleSplit(1, test_size=spec.quick_test_size, random_state=seed).split(X, groups=tr[spec.group_col]))
         _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
         lb = info["loading_rows"][b] if "loading_rows" in info else load
         out[line] = d2_tweedie(tgt.y_eval.values[b], p * lb)
@@ -67,20 +74,22 @@ def quick(name: str, cfg: dict, seed: int = 11) -> dict:
     return out
 
 
-def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: bool = True) -> dict:
+def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, verbose: bool = True) -> dict:
     """Returns dict with per-line OOF/test predictions and scores; caches to experiments/results/<name>.pkl."""
     if cfg["model"] == "blend":
         return run_blend(name, cfg)
     t0 = time.time()
+    spec = get_spec()
+    folds = spec.n_folds if folds is None else folds
     base = build_base()
     res = {"name": name, "cfg": cfg, "lines": {}}
-    for line in LINES:
+    for line in spec.lines:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
         y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
         c = _aux(cfg, base, line, tr, tgt, info)
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         oof, iters = np.zeros(len(tr)), []
-        for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr.policy_id)):
+        for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr[spec.group_col])):
             m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
             oof[b] = p * (info["loading_rows"][b] if "loading_rows" in info else load)
             iters.append(getattr(m, "best_iter", None))
@@ -89,7 +98,7 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
         ho = np.nan
         if holdout:
             yr = tr.period_start.dt.year.values
-            a, b = np.where(yr <= 2022)[0], np.where(yr == 2023)[0]
+            a, b = np.where(yr < spec.holdout_year)[0], np.where(yr == spec.holdout_year)[0]
             n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
             _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a])
             ho = d2_tweedie(tgt.y_eval.values[b], p * (info["loading_rows"][b] if "loading_rows" in info else load))
@@ -101,7 +110,7 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
                               "test_row_id": te.row_id.values, "test_pred": pt * pt_load, "cv": cv, "holdout": ho, "calibration": calib,
                               "info": info, "iters": iters, "importance": imp}
         if verbose:
-            print(f"  {line:9s} CV D2 {cv:.4f} | 2023 holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
+            print(f"  {line:9s} CV D2 {cv:.4f} | {spec.holdout_year} holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
                   f"| test mean {np.mean(pt * pt_load):,.1f}", flush=True)
     _summarise(res)
     res["minutes"] = (time.time() - t0) / 60
@@ -140,11 +149,14 @@ def _stack_apply(w, P):
     return np.exp(w["intercept"] + np.log(np.clip(P, 1e-6, None)) @ w["coef"])
 
 
-def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
+def run_blend(name: str, cfg: dict, folds: int | None = None) -> dict:
     """Per-line weights over cfg['parts'] (2 or more single models) on a simplex grid, chosen on OOF D².
 
     Also reports nested CV: weights are chosen on 4 folds and applied to the 5th (same GroupKFold by policy as the
     models), so the blend's own weight choice cannot flatter its score."""
+    spec = get_spec()
+    folds = spec.n_folds if folds is None else folds
+    CACHE = spec.cache_path
     parts = [load(p) for p in cfg["parts"]]
     for part in parts:    # a blend part's OOF used full-sample weights, which would flatter the nested score
         # equal-weight seed averages choose nothing from the data, so they are allowed as parts
@@ -155,10 +167,10 @@ def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
         grid = _simplex(len(parts), cfg.get("step", 0.05 if len(parts) <= 3 else 0.1))
     res = {"name": name, "cfg": cfg, "lines": {}}
     nested_y, nested_p = [], []
-    for line in LINES:
+    for line in spec.lines:
         L = [pt["lines"][line] for pt in parts]
         y = L[0]["y_eval"]
-        ids = pd.read_parquet(CACHE / f"train_{line}.parquet", columns=["row_id", "policy_id"])
+        ids = pd.read_parquet(CACHE / f"train_{line}.parquet", columns=["row_id", spec.group_col])
         for l in L:
             assert (l["row_id"] == ids.row_id.values).all(), "OOF rows misaligned"
             assert (l["test_row_id"] == L[0]["test_row_id"]).all(), "test rows misaligned"
@@ -173,7 +185,7 @@ def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
         w = fit_fn(y, P)
         score = d2_tweedie(y, apply_fn(w, P))
         nest = np.zeros_like(y, dtype=float)
-        for tr_idx, va_idx in GroupKFold(folds).split(y, groups=ids.policy_id.values):
+        for tr_idx, va_idx in GroupKFold(folds).split(y, groups=ids[spec.group_col].values):
             nest[va_idx] = apply_fn(fit_fn(y[tr_idx], P[tr_idx]), P[va_idx])
         nested_y.append(y)
         nested_p.append(nest)
@@ -199,13 +211,14 @@ def _summarise(res):
 
 
 def _save(res):
+    RESULTS = get_spec().results_path
     RESULTS.mkdir(parents=True, exist_ok=True)
     with open(RESULTS / f"{res['name']}.pkl", "wb") as f:
         pickle.dump(res, f)
 
 
 def load(name: str) -> dict:
-    with open(RESULTS / f"{name}.pkl", "rb") as f:
+    with open(get_spec().results_path / f"{name}.pkl", "rb") as f:
         return pickle.load(f)
 
 

@@ -9,15 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "experiments"))
 from configs import EXPERIMENTS  # noqa: E402
+from market_spec import get_spec  # noqa: E402
 
-RAW = ROOT / "data" / "raw" / "public"
-CACHE = ROOT / "experiments" / "cache"
-RESULTS = ROOT / "experiments" / "results"
+SPEC = get_spec()
+RAW = SPEC.data_path
+CACHE = SPEC.cache_path
+RESULTS = SPEC.results_path
 LOG = ROOT / "experiments" / "logs" / "reproduce.log"
-COMP = "iaa-ai-assisted-hackathon-2026-part-1"
-RAW_FILES = ["addresses", "claims", "customers", "policies_buildings", "policies_contents", "policies_motor",
-             "sample_submission", "test_buildings", "test_contents", "test_motor", "weather"]
-CACHE_FILES = [f"{k}_{l}" for k in ("train", "test") for l in ("motor", "buildings", "contents")] + ["claims"]
+COMP = SPEC.competition
+RAW_FILES = ["addresses", "claims", "customers", "sample_submission", "weather"] + \
+            [f"{k}_{l}" for l in SPEC.lines for k in ("policies", "test")]
+CACHE_FILES = [f"{k}_{l}" for k in ("train", "test") for l in SPEC.lines] + ["claims"]
 
 
 def order(final):
@@ -67,7 +69,7 @@ def run_cmd(label, cmd, final):
     """Run one step; raise SystemExit with a clear message on failure."""
     LOG.parent.mkdir(parents=True, exist_ok=True)
     if cmd == "download":
-        cmd = ["kaggle", "competitions", "download", "-c", COMP, "-p", str(ROOT / "data" / "raw")]
+        cmd = ["kaggle", "competitions", "download", "-c", COMP, "-p", str(SPEC.data_path.parent)]
     if cmd == "cache":
         import features
         features.build_base(refresh=True)
@@ -90,8 +92,8 @@ def run_cmd(label, cmd, final):
         sys.exit(f"FAILED: {label} (exit {rc}). See {LOG}. Fix and re-run; finished steps are skipped.")
     if label.startswith("download"):
         import zipfile
-        for z in (ROOT / "data" / "raw").glob("*.zip"):
-            zipfile.ZipFile(z).extractall(ROOT / "data" / "raw")
+        for z in SPEC.data_path.parent.glob("*.zip"):
+            zipfile.ZipFile(z).extractall(SPEC.data_path.parent)
 
 
 if __name__ == "__main__":

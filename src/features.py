@@ -4,14 +4,25 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from data import LINES, LEAKY_COLS, build_all, enrich, row_type
+from data import build_all, enrich, row_type
+from market_spec import get_spec
 
-CACHE = Path(__file__).resolve().parents[1] / "experiments" / "cache"
-YEARS = [2021, 2022, 2023, 2024, 2025]
 WEATHER = ["hail_days", "wind_exposure_index", "freezing_days", "dry_summer_index", "wildfire_index",
            "rainfall_mm", "mean_temperature_c"]
-DROP = ["row_id", "policy_id", "customer_id", "address_id", "period_start", "period_end", "claim_count",
-        "claim_cost", "year", "compulsory_excess", "customer_since_year", "year_built", "exposure"] + LEAKY_COLS
+_DROP_BASE = ["row_id", "policy_id", "customer_id", "address_id", "period_start", "period_end", "claim_count",
+              "claim_cost", "year", "compulsory_excess", "customer_since_year", "year_built", "exposure"]
+
+
+def __getattr__(name):
+    """CACHE / YEARS / DROP follow the active MarketSpec at access time (PEP 562)."""
+    s = get_spec()
+    if name == "CACHE":
+        return s.cache_path
+    if name == "YEARS":
+        return s.all_years
+    if name == "DROP":
+        return _DROP_BASE + list(s.leaky_cols)
+    raise AttributeError(f"module 'features' has no attribute {name!r}")
 
 
 LOOKBACK = 2  # years. A fixed window keeps history features comparable across years; cumulative totals grew
@@ -21,7 +32,7 @@ LOOKBACK = 2  # years. A fixed window keeps history features comparable across y
 def _prior(rows: pd.DataFrame, key: str, prefix: str) -> pd.DataFrame:
     """Exposure and claim count for `key` over the LOOKBACK years strictly before each row's year."""
     agg = rows.groupby([key, "year"]).agg(e=("exposure", "sum"), n=("claim_count", "sum")).unstack("year")
-    agg = agg.reindex(columns=pd.MultiIndex.from_product([["e", "n"], YEARS]), fill_value=0).fillna(0)
+    agg = agg.reindex(columns=pd.MultiIndex.from_product([["e", "n"], get_spec().all_years]), fill_value=0).fillna(0)
     out = []
     for m in ["e", "n"]:
         win = sum(agg[m].shift(k, axis=1).fillna(0) for k in range(1, LOOKBACK + 1))   # years Y-1 .. Y-LOOKBACK
@@ -32,7 +43,7 @@ def _prior(rows: pd.DataFrame, key: str, prefix: str) -> pd.DataFrame:
 def _prior_cols(rows: pd.DataFrame, key: str, prefix: str, cols: list) -> pd.DataFrame:
     """Sum of arbitrary per-row value columns for `key` over the LOOKBACK years before each row's year."""
     agg = rows.groupby([key, "year"])[cols].sum().unstack("year")
-    agg = agg.reindex(columns=pd.MultiIndex.from_product([cols, YEARS]), fill_value=0).fillna(0)
+    agg = agg.reindex(columns=pd.MultiIndex.from_product([cols, get_spec().all_years]), fill_value=0).fillna(0)
     out = []
     for c in cols:
         win = sum(agg[c].shift(k, axis=1).fillna(0) for k in range(1, LOOKBACK + 1))
@@ -69,7 +80,7 @@ def experience_features(train_all: pd.DataFrame, test_all: pd.DataFrame) -> pd.D
     feats = rows[["row_id", "line", "policy_id", "customer_id", "year"]].copy()
     feats = feats.merge(_prior(rows, "policy_id", "pol"), on=["policy_id", "year"], how="left")
     feats = feats.merge(_prior(rows, "customer_id", "cust"), on=["customer_id", "year"], how="left")
-    for l in LINES:
+    for l in get_spec().lines:
         part = _prior(rows[rows.line == l], "customer_id", f"cust_{l}")
         feats = feats.merge(part, on=["customer_id", "year"], how="left")
     # lines held by the customer in the same year (known at pricing time)
@@ -77,13 +88,15 @@ def experience_features(train_all: pd.DataFrame, test_all: pd.DataFrame) -> pd.D
     feats = feats.merge(held, on=["customer_id", "year"], how="left")
     num = [c for c in feats.columns if c.endswith(("_expo", "_claims"))]
     feats[num] = feats[num].fillna(0)
-    for p in ["pol", "cust"] + [f"cust_{l}" for l in LINES]:
+    for p in ["pol", "cust"] + [f"cust_{l}" for l in get_spec().lines]:
         feats[f"{p}_rate"] = feats[f"{p}_claims"] / (feats[f"{p}_expo"] + 0.5)
     return feats.drop(columns=["policy_id", "customer_id", "year"])
 
 
 def build_base(refresh: bool = False) -> dict:
     """Enriched + experience features for train and test, per line (cached as parquet)."""
+    spec = get_spec()
+    LINES, CACHE = spec.lines, spec.cache_path
     CACHE.mkdir(parents=True, exist_ok=True)
     paths = {f"{k}_{l}": CACHE / f"{k}_{l}.parquet" for k in ("train", "test") for l in LINES}
     if not refresh and all(p.exists() for p in paths.values()):
@@ -114,7 +127,8 @@ def build_base(refresh: bool = False) -> dict:
 
 def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame, list]:
     """Feature frames (same columns, shared category levels) for one line."""
-    drop = set(DROP)
+    spec = get_spec()
+    drop = set(_DROP_BASE) | set(spec.leaky_cols)
     if not cfg.get("history", True):
         drop |= {c for c in train.columns if c.startswith(("pol_", "cust_")) or c == "lines_held"}
     if not cfg.get("rich_history", False):
@@ -127,7 +141,7 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     if cfg.get("hist_nan_2021", False):
         # Data starts in 2021, so those rows' history is unobservable, not "no claims" (else history proxies the year).
         hist = [c for c in cols if c.startswith(("pol_", "cust_"))]
-        X.loc[train.year.values == 2021, hist] = np.nan
+        X.loc[train.year.values == spec.first_year, hist] = np.nan
     if cfg.get("weather_pca"):
         from sklearn.decomposition import PCA
         w = [c for c in WEATHER if c in X]

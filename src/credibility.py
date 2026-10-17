@@ -4,9 +4,15 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.model_selection import GroupKFold
 
+from market_spec import get_spec
 from metrics import d2_tweedie, tweedie_deviance
 
-COMPLETENESS_2024 = {"motor": 0.920, "buildings": 0.939, "contents": 0.960}
+def __getattr__(name):
+    if name in ("COMPLETENESS_2024", "COMPLETENESS_LAST_YEAR"):      # Part 1 name kept for backward compatibility
+        return get_spec().completeness_last_year
+    raise AttributeError(f"module 'credibility' has no attribute {name!r}")
+
+
 K_GRID = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 1e9]
 ALPHA_GRID = [1e-4, 1e-3, 1e-2, 1e-1, 0.3, 1.0, 3.0]
 MIN_LEVEL_ROWS = 500
@@ -14,7 +20,8 @@ MIN_LEVEL_ROWS = 500
 
 def folds_for(train_df):
     """Exactly the folds the models used."""
-    return list(GroupKFold(5).split(np.zeros(len(train_df)), groups=train_df["policy_id"]))
+    s = get_spec()
+    return list(GroupKFold(s.n_folds).split(np.zeros(len(train_df)), groups=train_df[s.group_col]))
 
 
 # ---------------------------------------------------------------- Part 1
@@ -28,7 +35,7 @@ def buhlmann_terms(train_df, test_df, oof, y_eval, completeness_2024, cap_q=0.99
     y_eval = np.asarray(y_eval, float)
     pos = y_eval[y_eval > 0]
     cap = np.quantile(pos, cap_q) if len(pos) else np.inf
-    comp = np.where(train_df["year"].to_numpy() == 2024, 1.0 / completeness_2024, 1.0)
+    comp = np.where(np.isin(train_df["year"].to_numpy(), get_spec().immature_years), 1.0 / completeness_2024, 1.0)
     capped = np.minimum(y_eval, cap)
     capped = capped * (oof.sum() / capped.sum())  # population ratio of A_c to P is 1 (cap removes mass from A only)
     a_n = np.nan_to_num(train_df["claim_count"].to_numpy(float)) * comp
@@ -179,28 +186,35 @@ def segment_nested(y, mu, D, folds, alphas=ALPHA_GRID):
 # ---------------------------------------------------------------- Part 3
 def _segment_defs(line, tr, sum_q):
     segs = {}
+    has = lambda *cols: all(c in tr.columns for c in cols)      # a missing column skips its segment, never KeyErrors
     if line == "motor":
-        for mm in ("MM193", "MM251", "MM186", "MM124"):
-            segs[f"make_model={mm}"] = (tr["make_model"] == mm).to_numpy()
-        segs["cover_type=third_party_only"] = (tr["cover_type"] == "third_party_only").to_numpy()
+        if has("make_model"):
+            for mm in ("MM193", "MM251", "MM186", "MM124"):
+                segs[f"make_model={mm}"] = (tr["make_model"] == mm).to_numpy()
+        if has("cover_type"):
+            segs["cover_type=third_party_only"] = (tr["cover_type"] == "third_party_only").to_numpy()
     if line == "buildings":
-        segs["sum_insured bottom decile"] = (tr["sum_insured"] <= sum_q[0]).to_numpy()
-        segs["sum_insured top decile"] = (tr["sum_insured"] >= sum_q[1]).to_numpy()
-        segs["bedrooms==1"] = (tr["bedrooms"] == 1).to_numpy()
-        segs["listed_building"] = tr["listed_building"].fillna(False).astype(bool).to_numpy()
-    if line == "contents":
+        if has("sum_insured") and sum_q is not None:
+            segs["sum_insured bottom decile"] = (tr["sum_insured"] <= sum_q[0]).to_numpy()
+            segs["sum_insured top decile"] = (tr["sum_insured"] >= sum_q[1]).to_numpy()
+        if has("bedrooms"):
+            segs["bedrooms==1"] = (tr["bedrooms"] == 1).to_numpy()
+        if has("listed_building"):
+            segs["listed_building"] = tr["listed_building"].fillna(False).astype(bool).to_numpy()
+    if line == "contents" and has("flood_zone"):
         segs["flood_zone==5"] = (tr["flood_zone"] == 5).to_numpy()
-    pc = tr["pol_claims"].fillna(0)
-    segs["pol_claims=0"] = (pc == 0).to_numpy()
-    segs["pol_claims=1"] = (pc == 1).to_numpy()
-    segs["pol_claims>=2"] = (pc >= 2).to_numpy()
+    if has("pol_claims"):
+        pc = tr["pol_claims"].fillna(0)
+        segs["pol_claims=0"] = (pc == 0).to_numpy()
+        segs["pol_claims=1"] = (pc == 1).to_numpy()
+        segs["pol_claims>=2"] = (pc >= 2).to_numpy()
     return segs
 
 
 def correct(name, use_buhlmann=True, use_segments=True, include_levels=False):
     import pipeline
-    from data import LINES
-    from features import CACHE
+    spec = get_spec()
+    LINES, CACHE = spec.lines, spec.cache_path
 
     base = pipeline.load(name)
     out_lines, checks, summary = {}, [], {}
@@ -223,7 +237,7 @@ def correct(name, use_buhlmann=True, use_segments=True, include_levels=False):
         print(f"\n=== {line} ===  base D2 {d2_base:.5f}")
 
         if use_buhlmann:
-            ttr, tte, sev = buhlmann_terms(tr, te, mu, y, COMPLETENESS_2024[line])
+            ttr, tte, sev = buhlmann_terms(tr, te, mu, y, spec.completeness_last_year[line])
             _ok = (ttr["E"] > 0) & (ttr["P"] > 0)
             print(f"  sanity: exposure-weighted mean A_c/P (train, E>0) = "
                   f"{np.sum(ttr['E'][_ok] * ttr['A_c'][_ok] / ttr['P'][_ok]) / np.sum(ttr['E'][_ok]):.4f}; sev={sev:.1f}")
