@@ -56,6 +56,10 @@ EXPERIMENTS = {
                      model="lgbm", target=FULL_T, features={**HIST_F, "weather_pca": 3}),
     "L13_prem": dict(desc="DIAGNOSTIC: L6 + written_premium (user approval needed before any final use)",
                      proposer="user (test, decide on results)", model="lgbm", target=FULL_T, features={**HIST_F, "premium": True}),
+    "B10_cap99": dict(desc="B6 (GLM+boost) with cap at 99th pct", proposer="AI (cap sensitivity from L10)",
+                      model="glmboost", target={**FULL_T, "cap_q": 0.99}, features=HIST_F),
+    "X2_blend": dict(desc="Per-line blend of B10 and L10 (both cap 99%)", proposer="user (#9) + AI", model="blend",
+                     parts=["B10_cap99", "L10_cap99"]),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
