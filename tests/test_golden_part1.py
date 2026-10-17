@@ -17,6 +17,8 @@ from configs import EXPERIMENTS  # noqa: E402
 from features import build_base, model_matrix  # noqa: E402
 from target import prepare_target  # noqa: E402
 
+pytestmark = pytest.mark.part1_data
+
 GOLDEN = json.loads((ROOT / "tests" / "golden_part1.json").read_text())
 
 

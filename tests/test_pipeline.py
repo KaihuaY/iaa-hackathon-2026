@@ -29,6 +29,7 @@ def test_metric_matches_sklearn():
     assert tweedie_deviance([0.0], [1.0])[0] > 0
 
 
+@pytest.mark.part1_data
 @pytest.mark.parametrize("line", LINES)
 def test_cleaning(line):
     for name in (f"policies_{line}", f"test_{line}"):
@@ -42,17 +43,20 @@ def test_cleaning(line):
             assert set(d.construction_type.dropna()) <= {"brick", "stone", "timber", "non_standard"}
 
 
+@pytest.mark.part1_data
 def test_claims_deduplicated():
     c = clean_claims(load("claims"))
     assert not c.drop(columns="claim_id").duplicated().any()
 
 
+@pytest.mark.part1_data
 def test_customer_join_complete(base):
     cust = set(load("customers").customer_id)
     for l in LINES:
         assert base[f"test_{l}"].customer_id.isin(cust).all()
 
 
+@pytest.mark.part1_data
 @pytest.mark.parametrize("line", LINES)
 def test_no_leakage_in_features(base, line):
     X, Xt, _ = model_matrix(base[f"train_{line}"], base[f"test_{line}"], {"history": True})
@@ -61,6 +65,7 @@ def test_no_leakage_in_features(base, line):
     assert list(X.columns) == list(Xt.columns)
 
 
+@pytest.mark.part1_data
 def test_history_uses_only_prior_years(base):
     tr = base["train_motor"]
     first = tr[tr.year == 2021]
@@ -71,6 +76,7 @@ def test_history_uses_only_prior_years(base):
     assert np.allclose(t.pol_claims.values, t.policy_id.map(prior).fillna(0).values)
 
 
+@pytest.mark.part1_data
 def test_rich_history_uses_only_prior_years(base):
     tr = base["train_buildings"]
     hx = [c for c in tr.columns if c.startswith("hx_")]
@@ -83,6 +89,7 @@ def test_rich_history_uses_only_prior_years(base):
     assert np.allclose(t[n_cols].sum(axis=1).values, t.policy_id.map(prev).fillna(0).values)
 
 
+@pytest.mark.part1_data
 def test_history_window_is_stable_across_years(base):
     """History features must mean the same thing in every year (bounded look-back), incl. the 2025 test set."""
     from features import LOOKBACK
@@ -94,6 +101,7 @@ def test_history_window_is_stable_across_years(base):
     assert abs(m25 / m24 - 1) < 0.1, (m24, m25)
 
 
+@pytest.mark.part1_data
 def test_claims_fall_inside_row_period(base):
     c = base["claims"].dropna(subset=["row_id"])
     rows = pd.concat([base[f"train_{l}"][["row_id", "period_start", "period_end"]] for l in LINES])
@@ -101,6 +109,7 @@ def test_claims_fall_inside_row_period(base):
     assert ((m.loss_date >= m.period_start) & (m.loss_date <= m.period_end)).all()
 
 
+@pytest.mark.part1_data
 @pytest.mark.parametrize("line", LINES)
 def test_segment_loading(base, line):
     cfg = {"develop": True, "cap_q": 0.99, "trend": "premium", "weight_power": 1.0}
@@ -119,6 +128,7 @@ def test_segment_loading(base, line):
     assert abs(wm / info["loading"] - 1) < 0.005
 
 
+@pytest.mark.part1_data
 @pytest.mark.parametrize("line", LINES)
 def test_target_development(base, line):
     cfg = {"develop": True, "cap_q": 0.995, "trend": "premium", "weight_power": 1.0}
@@ -129,6 +139,7 @@ def test_target_development(base, line):
     assert (t.w > 0).all() and (t.w <= 1).all()
 
 
+@pytest.mark.part1_data
 def test_submission_validation():
     from submit import validate
     s = load("sample_submission").assign(prediction=1.0)
@@ -139,6 +150,7 @@ def test_submission_validation():
         validate(s.iloc[:-1])
 
 
+@pytest.mark.part1_data
 def test_trend_to_target_year(base):
     from target import trend_index
     tr, te = base["train_buildings"], base["test_buildings"]
@@ -149,6 +161,7 @@ def test_trend_to_target_year(base):
             assert tf[2024] == pytest.approx(1.0)
 
 
+@pytest.mark.part1_data
 def test_lb_predictor_and_submit_gate():
     import subprocess
     import lbmodel

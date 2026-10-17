@@ -143,6 +143,7 @@ def test_column_aliases_rename_on_load(tmp_path):
 
 
 def test_clean_policies_tolerates_missing_columns():
+    ms.use_spec("part1")                                   # asserts the Part 1 customer_id width (8)
     df = pd.DataFrame({"row_id": ["1", "2"], "customer_id": ["12", "34"],
                        "period_start": pd.to_datetime(["2021-01-01"] * 2), "period_end": pd.to_datetime(["2021-12-31"] * 2),
                        "exposure": [1.0, 1.0], "years_licensed": [5, 6]})          # no driver_age

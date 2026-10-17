@@ -9,7 +9,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import market  # noqa: E402
+from market_spec import using_spec  # noqa: E402
+
+with using_spec("part1"):      # src/market.py fixes its line list (and EXPECTED_SCHEMA) at import; these tests use a 3-line market
+    import market  # noqa: E402
 
 N = 200
 LINES = ("motor", "buildings", "contents")
