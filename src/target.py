@@ -1,0 +1,130 @@
+"""Target preparation: develop to ultimate, cap large losses, trend to 2025, maturity weights.
+
+Development uses a Bornhuetter-Ferguson style IBNR: each row gets the claims it is *expected* to still report,
+  IBNR_row = a-priori frequency x sum over its days of (1 - completeness(age)) x late-claim severity(age) / 365,
+so rows without reported claims also pick up IBNR, and nothing depends on the row's own (noisy) experience.
+"""
+import numpy as np
+import pandas as pd
+
+from data import VALUATION_DATE
+
+# Open motor bodily-injury claim with an 11.9M case estimate, 10x the next largest claim: treated as a data error
+# (capped like any large loss, and its excess is NOT spread into the large-loss loading).
+SUSPECT_CLAIMS = ["CL30973963"]
+MATURE_YEARS = (2021, 2022)
+MAX_LAG = 730
+DAY0 = pd.Timestamp("2021-01-01")
+
+
+def caps(claims: pd.DataFrame, q: float) -> dict:
+    """Per-line claim-level cap at quantile q of net incurred."""
+    return {l: float(g.net_incurred.quantile(q)) for l, g in claims.groupby("line")} if q else {}
+
+
+def _lags(claims):
+    return (claims.report_date - claims.loss_date).dt.days
+
+
+def completeness_curve(claims: pd.DataFrame, line: str) -> np.ndarray:
+    """P(claim reported within `age` days of loss), age = 0..MAX_LAG, from mature loss years."""
+    c = claims[(claims.line == line) & claims.loss_date.dt.year.isin(MATURE_YEARS)]
+    lag = np.sort(_lags(c).values)
+    return np.searchsorted(lag, np.arange(MAX_LAG + 1), side="right") / len(lag)
+
+
+def late_severity_relativity(claims: pd.DataFrame, line: str, cap: float | None) -> np.ndarray:
+    """Mean severity of claims reported later than `age` days, relative to all claims (mature years)."""
+    c = claims[(claims.line == line) & claims.loss_date.dt.year.isin(MATURE_YEARS)]
+    sev = c.net_incurred.clip(upper=cap) if cap else c.net_incurred
+    order = np.argsort(_lags(c).values)
+    lag, sev = _lags(c).values[order], sev.values[order]
+    tail_sum = np.cumsum(sev[::-1])[::-1]          # sum of sev for claims with lag >= lag[i]
+    out = np.empty(MAX_LAG + 1)
+    for a in range(MAX_LAG + 1):
+        i = np.searchsorted(lag, a, side="right")   # claims with lag > a
+        n = len(lag) - i
+        out[a] = tail_sum[i] / n if n >= 30 else np.nan
+    out = pd.Series(out).ffill().values
+    return out / sev.mean()
+
+
+def _daily(curve: np.ndarray) -> np.ndarray:
+    """Map an age-indexed curve onto calendar days 2021-01-01 .. valuation date."""
+    days = pd.date_range(DAY0, VALUATION_DATE, freq="D")
+    age = np.clip((VALUATION_DATE - days).days, 0, MAX_LAG)
+    return curve[age]
+
+
+def _row_integral(pol: pd.DataFrame, daily: np.ndarray) -> np.ndarray:
+    """Sum of a daily series over each row's period (days)."""
+    cs = np.concatenate([[0.0], np.cumsum(daily)])
+    s = np.clip((pol.period_start - DAY0).dt.days.values, 0, len(daily) - 1)
+    e = np.clip((pol.period_end - DAY0).dt.days.values, 0, len(daily) - 1)
+    return cs[e + 1] - cs[s]
+
+
+def trend_index(train: pd.DataFrame, test: pd.DataFrame, method: str, pp_by_year: pd.Series | None = None) -> dict:
+    """Factor taking each training year's cost to the 2025 level."""
+    years = [2021, 2022, 2023, 2024]
+    if method == "none":
+        return {y: 1.0 for y in years}
+    if method == "premium":
+        full = train[train.exposure > 0.99]
+        idx = full.groupby(full.period_start.dt.year).written_premium.mean()
+        idx[2025] = test.loc[test.exposure > 0.99, "written_premium"].mean()
+        return {y: float(idx[2025] / idx[y]) for y in years}
+    if method == "claims":
+        # log-linear fit of developed pure premium on mature-ish years 2021-23
+        pp = pp_by_year.loc[[2021, 2022, 2023]]
+        slope = np.polyfit(pp.index.values, np.log(pp.values), 1)[0]
+        return {y: float(np.exp(slope * (2025 - y))) for y in years}
+    raise ValueError(method)
+
+
+def _ibnr(df, claims, lc, line, cost, cap):
+    """BF IBNR per row on the scale of `cost` (capped or not)."""
+    comp = completeness_curve(claims, line)
+    rel = late_severity_relativity(claims, line, cap)
+    m = df.year <= 2023
+    freq = (lc.loss_date.dt.year <= 2023).sum() / (df.loc[m, "exposure"] * df.loc[m, "completeness"]).sum()
+    sev = cost[lc.loss_date.dt.year == 2023].mean()          # recent, mostly mature severity
+    return freq * sev * _row_integral(df, _daily((1 - comp) * rel)) / 365
+
+
+def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, line: str, cfg: dict) -> tuple[pd.DataFrame, dict]:
+    """Add training label, evaluation label and weight to a line's training rows.
+
+    cfg keys: develop (bool), cap_q (float or None), trend ('premium'|'claims'|'none'),
+              open_factor (float), weight_power (float).
+    y_train follows cfg. y_eval is FIXED across experiments so CV scores are comparable:
+    uncapped cost (suspect claim at paid-to-date), developed, premium-trended.
+    """
+    lc = claims[(claims.line == line) & claims.row_id.notna()].copy()
+    suspect = lc.claim_id.isin(SUSPECT_CLAIMS)
+    base = lc.net_incurred.where(~suspect, lc.paid_to_date)
+    cost = base.where(lc.status != "open", base * cfg.get("open_factor", 1.0))
+    cap = caps(claims[claims.line == line], cfg.get("cap_q")).get(line)
+    capped = cost.clip(upper=cap) if cap else cost
+    mature = lc.loss_date.dt.year <= 2023
+    loading = float(cost[mature].sum() / capped[mature].sum())
+
+    df = pol[["row_id", "period_start", "period_end", "exposure", "written_premium"]].copy()
+    df["year"] = df.period_start.dt.year
+    days = ((df.period_end - df.period_start).dt.days + 1).values
+    df["completeness"] = _row_integral(df, _daily(completeness_curve(claims, line))) / days
+    df["rep_train"] = df.row_id.map(capped.groupby(lc.row_id).sum()).fillna(0.0)
+    df["rep_eval"] = df.row_id.map(base.groupby(lc.row_id).sum()).fillna(0.0)
+    df["ibnr"] = _ibnr(df, claims, lc, line, capped, cap) if cfg.get("develop", True) else 0.0
+    ibnr_eval = _ibnr(df, claims, lc, line, base, None)
+
+    pp_year = (df.rep_train + df.ibnr).groupby(df.year).sum() / df.exposure.groupby(df.year).sum()
+    tf = trend_index(pol, test, cfg.get("trend", "premium"), pp_year)
+    tf_eval = trend_index(pol, test, "premium")
+    df["y_train"] = (df.rep_train + df.ibnr) * df.year.map(tf)
+    df["y_eval"] = (df.rep_eval + ibnr_eval) * df.year.map(tf_eval)
+    wp = cfg.get("weight_power", 0.0)
+    df["w"] = df.completeness.clip(lower=0.05) ** wp if wp else 1.0
+    info = {"line": line, "cap": cap, "loading": loading, "trend": tf,
+            "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
+    return df[["row_id", "y_train", "y_eval", "w", "completeness", "ibnr"]], info

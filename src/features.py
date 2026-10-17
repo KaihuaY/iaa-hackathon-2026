@@ -1,0 +1,103 @@
+"""Model matrices per line: enriched rating factors + experience rating (strictly prior years)."""
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from data import LINES, LEAKY_COLS, build_all, enrich, row_type
+
+CACHE = Path(__file__).resolve().parents[1] / "experiments" / "cache"
+YEARS = [2021, 2022, 2023, 2024, 2025]
+WEATHER = ["hail_days", "wind_exposure_index", "freezing_days", "dry_summer_index", "wildfire_index",
+           "rainfall_mm", "mean_temperature_c"]
+DROP = ["row_id", "policy_id", "customer_id", "address_id", "period_start", "period_end", "claim_count",
+        "claim_cost", "year", "compulsory_excess", "customer_since_year", "year_built", "exposure"] + LEAKY_COLS
+
+
+def _prior(rows: pd.DataFrame, key: str, prefix: str) -> pd.DataFrame:
+    """Exposure and claim count for `key` summed over years strictly before each row's year."""
+    agg = rows.groupby([key, "year"]).agg(e=("exposure", "sum"), n=("claim_count", "sum")).unstack("year")
+    agg = agg.reindex(columns=pd.MultiIndex.from_product([["e", "n"], YEARS]), fill_value=0).fillna(0)
+    out = []
+    for m in ["e", "n"]:
+        cum = agg[m].cumsum(axis=1).shift(1, axis=1).fillna(0)        # strictly prior years
+        out.append(cum.stack().rename(f"{prefix}_{'expo' if m == 'e' else 'claims'}"))
+    return pd.concat(out, axis=1).rename_axis([key, "year"]).reset_index()
+
+
+def experience_features(train_all: pd.DataFrame, test_all: pd.DataFrame) -> pd.DataFrame:
+    """Per (line,row) prior-claims features: same policy, same customer (own line and all lines)."""
+    rows = pd.concat([train_all, test_all.assign(claim_count=np.nan)], ignore_index=True)
+    rows["claim_count"] = rows.claim_count.fillna(0)               # test years never feed earlier years anyway
+    feats = rows[["row_id", "line", "policy_id", "customer_id", "year"]].copy()
+    feats = feats.merge(_prior(rows, "policy_id", "pol"), on=["policy_id", "year"], how="left")
+    feats = feats.merge(_prior(rows, "customer_id", "cust"), on=["customer_id", "year"], how="left")
+    for l in LINES:
+        part = _prior(rows[rows.line == l], "customer_id", f"cust_{l}")
+        feats = feats.merge(part, on=["customer_id", "year"], how="left")
+    # lines held by the customer in the same year (known at pricing time)
+    held = rows.groupby(["customer_id", "year"]).line.nunique().rename("lines_held").reset_index()
+    feats = feats.merge(held, on=["customer_id", "year"], how="left")
+    num = [c for c in feats.columns if c.endswith(("_expo", "_claims"))]
+    feats[num] = feats[num].fillna(0)
+    for p in ["pol", "cust"] + [f"cust_{l}" for l in LINES]:
+        feats[f"{p}_rate"] = feats[f"{p}_claims"] / (feats[f"{p}_expo"] + 0.5)
+    return feats.drop(columns=["policy_id", "customer_id", "year"])
+
+
+def build_base(refresh: bool = False) -> dict:
+    """Enriched + experience features for train and test, per line (cached as parquet)."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    paths = {f"{k}_{l}": CACHE / f"{k}_{l}.parquet" for k in ("train", "test") for l in LINES}
+    if not refresh and all(p.exists() for p in paths.values()):
+        out = {k: pd.read_parquet(p) for k, p in paths.items()}
+        out["claims"] = pd.read_parquet(CACHE / "claims.parquet")
+        return out
+    log = []
+    D = build_all(log)
+    tr = {l: enrich(D[f"train_{l}"], D["customers"], D["addresses"], D["weather"]) for l in LINES}
+    te = {l: enrich(D[f"test_{l}"], D["customers"], D["addresses"], D["weather"]) for l in LINES}
+    train_all = pd.concat([tr[l].assign(line=l) for l in LINES], ignore_index=True)
+    test_all = pd.concat([te[l].assign(line=l) for l in LINES], ignore_index=True)
+    exp = experience_features(train_all[["row_id", "line", "policy_id", "customer_id", "year", "exposure", "claim_count"]],
+                              test_all[["row_id", "line", "policy_id", "customer_id", "year", "exposure"]])
+    out = {}
+    for l in LINES:
+        for k, d in (("train", tr[l]), ("test", te[l])):
+            d = d.merge(exp[exp.line == l].drop(columns="line"), on="row_id", how="left")
+            d["row_type"] = row_type(d)
+            d["start_month"] = d.period_start.dt.month
+            d.to_parquet(paths[f"{k}_{l}"])
+            out[f"{k}_{l}"] = d
+    D["claims"].to_parquet(CACHE / "claims.parquet")
+    out["claims"] = D["claims"]
+    return out
+
+
+def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame, list]:
+    """Feature frames (same columns, shared category levels) for one line."""
+    drop = set(DROP)
+    if not cfg.get("history", True):
+        drop |= {c for c in train.columns if c.startswith(("pol_", "cust_")) or c == "lines_held"}
+    if not cfg.get("premium", False):
+        drop.add("written_premium")
+    cols = [c for c in train.columns if c not in drop and c in test.columns]
+    X, Xt = train[cols].copy(), test[cols].copy()
+    if cfg.get("weather_pca"):
+        from sklearn.decomposition import PCA
+        w = [c for c in WEATHER if c in X]
+        mu, sd = X[w].mean(), X[w].std()
+        pca = PCA(n_components=cfg["weather_pca"]).fit(((X[w] - mu) / sd).fillna(0))
+        for d in (X, Xt):
+            comp = pca.transform(((d[w] - mu) / sd).fillna(0))
+            for i in range(comp.shape[1]):
+                d[f"weather_pc{i + 1}"] = comp[:, i]
+            d.drop(columns=w, inplace=True)
+    cats = []
+    for c in X.columns:
+        if X[c].dtype == object or X[c].dtype == bool or str(X[c].dtype) == "category":
+            levels = sorted(set(X[c].dropna().astype(str)) | set(Xt[c].dropna().astype(str)))
+            X[c] = pd.Categorical(X[c].astype(str).where(X[c].notna()), categories=levels)
+            Xt[c] = pd.Categorical(Xt[c].astype(str).where(Xt[c].notna()), categories=levels)
+            cats.append(c)
+    return X, Xt, cats
