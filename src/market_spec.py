@@ -43,6 +43,10 @@ class MarketSpec:
     backtest_years: tuple = (2023, 2024)
     max_lag: int = 730
     valuation_date: str = "2024-12-31"
+    # ---- column aliases: {name in this market's files: canonical Part 1 name}, applied by data.load() right after
+    # reading a table. The CANONICAL SCHEMA is Part 1's: all downstream code (cleaning, features, target, credibility,
+    # configs) keeps using the Part 1 column names. Columns a market drops are tolerated (skipped, logged once).
+    column_aliases: dict = field(default_factory=dict)
     # ---- cleaning
     customer_id_width: int | None = 8            # zero-pad customer_id to this width; None = skip
     exposure_days_check: bool = True             # repair exposure recorded in days rather than years
@@ -145,24 +149,34 @@ def _resolve(spec_or_name) -> MarketSpec:
         raise KeyError(f"unknown market {spec_or_name!r}; registered: {sorted(REGISTRY)}") from None
 
 
-SPEC: MarketSpec = _resolve(os.environ.get("IAA_MARKET", "part1"))
+_ACTIVE: MarketSpec | None = None   # resolved lazily on first get_spec(), so specs registered later in this file
+                                    # (or by the caller) can be selected through the IAA_MARKET env var
 
 
 def get_spec() -> MarketSpec:
-    return SPEC
+    global _ACTIVE
+    if _ACTIVE is None:
+        _ACTIVE = _resolve(os.environ.get("IAA_MARKET", "part1"))
+    return _ACTIVE
+
+
+def __getattr__(name):
+    if name == "SPEC":                  # back-compat: market_spec.SPEC
+        return get_spec()
+    raise AttributeError(f"module 'market_spec' has no attribute {name!r}")
 
 
 def use_spec(spec_or_name) -> MarketSpec:
     """Make a spec (instance or registered name) the active one. Takes effect immediately in every module."""
-    global SPEC
-    SPEC = _resolve(spec_or_name)
-    return SPEC
+    global _ACTIVE
+    _ACTIVE = _resolve(spec_or_name)
+    return _ACTIVE
 
 
 @contextlib.contextmanager
 def using_spec(spec_or_name):
     """Temporarily activate a spec."""
-    prev = SPEC
+    prev = get_spec()
     try:
         yield use_spec(spec_or_name)
     finally:
@@ -170,6 +184,15 @@ def using_spec(spec_or_name):
 
 
 replace = dataclasses.replace
+
+_WARNED: set = set()
+
+
+def warn_once(msg: str) -> None:
+    """Print a message the first time it is seen (used for columns a market does not provide)."""
+    if msg not in _WARNED:
+        _WARNED.add(msg)
+        print(f"[market_spec] {msg}")
 
 
 # ---- dress-rehearsal market (synthetic, see scripts/make_rehearsal_market.py)
@@ -181,7 +204,8 @@ REHEARSAL = register(dataclasses.replace(
     holdout_year=2022, backtest_years=(2021, 2022), valuation_date="2022-12-31",
     customer_id_width=None, si_unit_error={"buildings": 5e6 * 50}, expected_rows=None,
     noise_features=tuple(f for f in PART1.noise_features if f != "previous_insurer"),
+    column_aliases={"age_driver": "driver_age"},
     segments={**{k: v for k, v in PART1.segments.items() if k != "contents"},
-              "motor": {**PART1.segments["motor"], "num": "age_driver"}},
+              "motor": {**PART1.segments["motor"], "num": "driver_age"}},
     irrelevant={k: v for k, v in PART1.irrelevant.items() if k != "contents"},
 ))

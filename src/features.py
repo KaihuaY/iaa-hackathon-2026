@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from data import build_all, enrich, row_type
-from market_spec import get_spec
+from market_spec import get_spec, warn_once
 
 WEATHER = ["hail_days", "wind_exposure_index", "freezing_days", "dry_summer_index", "wildfire_index",
            "rainfall_mm", "mean_temperature_c"]
@@ -57,8 +57,12 @@ def rich_history(train_all: pd.DataFrame, test_all: pd.DataFrame, claims: pd.Dat
     c = claims.dropna(subset=["row_id"]).copy()
     cap = c.groupby("line").net_incurred.transform(lambda s: s.quantile(0.99))
     c["cost"] = c.net_incurred.clip(upper=cap)
-    per_row = c.pivot_table(index="row_id", columns="peril", values="claim_id", aggfunc="count", fill_value=0)
-    per_row.columns = [f"n_{p}" for p in per_row.columns]
+    if "peril" in c.columns:
+        per_row = c.pivot_table(index="row_id", columns="peril", values="claim_id", aggfunc="count", fill_value=0)
+        per_row.columns = [f"n_{p}" for p in per_row.columns]
+    else:
+        warn_once("rich_history: claims have no peril column; per-peril counts skipped")
+        per_row = pd.DataFrame(index=c.row_id.unique())
     per_row["cost"] = c.groupby("row_id").cost.sum()
     vals = list(per_row.columns)
     rows = pd.concat([train_all[["row_id", "line", "policy_id", "customer_id", "year"]],

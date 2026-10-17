@@ -7,7 +7,7 @@ so rows without reported claims also pick up IBNR, and nothing depends on the ro
 import numpy as np
 import pandas as pd
 
-from market_spec import get_spec
+from market_spec import get_spec, warn_once
 
 
 def __getattr__(name):
@@ -140,6 +140,11 @@ def _segments(pol: pd.DataFrame, test: pd.DataFrame, line: str) -> tuple[pd.Seri
     if sd is None:                                   # no segment definition: every row falls back to the pooled loading
         nan = pd.Series(np.nan, index=pol.index, dtype=object), pd.Series(np.nan, index=test.index, dtype=object)
         return nan
+    need = [sd[k] for k in ("cat", "num", "col") if k in sd]
+    absent = [c for c in need if c not in pol.columns or c not in test.columns]
+    if absent:
+        warn_once(f"_segments[{line}]: column(s) {absent} absent; pooled large-loss loading used")
+        return pd.Series(np.nan, index=pol.index, dtype=object), pd.Series(np.nan, index=test.index, dtype=object)
     if sd["kind"] == "cross":
         cat, num = sd["cat"], sd["num"]
         def lab(d):

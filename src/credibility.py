@@ -4,7 +4,7 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.model_selection import GroupKFold
 
-from market_spec import get_spec
+from market_spec import get_spec, warn_once
 from metrics import d2_tweedie, tweedie_deviance
 
 def __getattr__(name):
@@ -116,7 +116,10 @@ def segment_design(train_df, test_df, include_levels=False):
         names.append(name)
 
     def has(c):
-        return c in train_df.columns and c in test_df.columns
+        ok = c in train_df.columns and c in test_df.columns
+        if not ok:
+            warn_once(f"segment_design: column {c!r} absent; its segments are skipped")
+        return ok
 
     for feat in (("make_model", "previous_insurer") if include_levels else ()):
         if not has(feat):
@@ -186,7 +189,11 @@ def segment_nested(y, mu, D, folds, alphas=ALPHA_GRID):
 # ---------------------------------------------------------------- Part 3
 def _segment_defs(line, tr, sum_q):
     segs = {}
-    has = lambda *cols: all(c in tr.columns for c in cols)      # a missing column skips its segment, never KeyErrors
+    def has(*cols):                                  # a missing column skips its segment, never KeyErrors
+        ok = all(c in tr.columns for c in cols)
+        if not ok:
+            warn_once(f"_segment_defs[{line}]: column(s) {cols} absent; segment skipped")
+        return ok
     if line == "motor":
         if has("make_model"):
             for mm in ("MM193", "MM251", "MM186", "MM124"):

@@ -130,3 +130,34 @@ def test_immature_years_drive_completeness_scaling():
     ms.use_spec(replace(ms.PART1, name="imm", immature_years=(2023,)))
     _, _, sev_imm = credibility.buhlmann_terms(df, test, oof, y, 0.5)
     assert sev_imm != sev_p1                                                 # 2023 counts now scaled by 1/0.5
+
+
+# ---------------------------------------------------------------- phase B: aliases, missing columns, env selection
+def test_column_aliases_rename_on_load(tmp_path):
+    pd.DataFrame({"row_id": [1, 2], "age_driver": [30, 40], "other": [1.0, 2.0]}).to_parquet(tmp_path / "policies_motor.parquet")
+    ms.use_spec(replace(ms.PART1, name="alias_t", column_aliases={"age_driver": "driver_age"}))
+    df = data.load("policies_motor", tmp_path)
+    assert "driver_age" in df.columns and "age_driver" not in df.columns and df["row_id"].tolist() == ["1", "2"]
+    ms.use_spec("part1")                                   # no alias in Part 1: columns untouched
+    assert "age_driver" in data.load("policies_motor", tmp_path).columns
+
+
+def test_clean_policies_tolerates_missing_columns():
+    df = pd.DataFrame({"row_id": ["1", "2"], "customer_id": ["12", "34"],
+                       "period_start": pd.to_datetime(["2021-01-01"] * 2), "period_end": pd.to_datetime(["2021-12-31"] * 2),
+                       "exposure": [1.0, 1.0], "years_licensed": [5, 6]})          # no driver_age
+    out = data.clean_policies(df, "motor", [], "motor")
+    assert len(out) == 2 and out["customer_id"].str.len().eq(8).all()
+    out2 = data.clean_policies(df.drop(columns=["customer_id", "years_licensed"]), "motor")   # no customer_id either
+    assert len(out2) == 2
+
+
+def test_env_var_selects_spec_registered_later(monkeypatch):
+    monkeypatch.setenv("IAA_MARKET", "rehearsal")
+    monkeypatch.setattr(ms, "_ACTIVE", None)
+    assert ms.get_spec().name == "rehearsal"               # REHEARSAL is registered after the module-level code
+    assert ms.get_spec().column_aliases == {"age_driver": "driver_age"}
+    monkeypatch.setattr(ms, "_ACTIVE", None)
+    monkeypatch.setenv("IAA_MARKET", "nope")
+    with pytest.raises(KeyError):
+        ms.get_spec()

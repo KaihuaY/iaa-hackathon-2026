@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from market_spec import get_spec
+from market_spec import get_spec, warn_once
 
 ID_COLS = ["row_id", "policy_id", "customer_id", "address_id", "claim_id"]
 DATE_COLS = ["period_start", "period_end", "loss_date", "report_date", "date_of_birth"]
@@ -31,6 +31,9 @@ def load(name: str, data_dir: Path | None = None) -> pd.DataFrame:
     """Read one parquet table, keep ids as text and parse date columns."""
     data_dir = Path(data_dir) if data_dir is not None else get_spec().data_path
     df = pd.read_parquet(data_dir / f"{name}.parquet")
+    alias = {a: c for a, c in get_spec().column_aliases.items() if a in df.columns and c not in df.columns}
+    if alias:
+        df = df.rename(columns=alias)       # canonical schema = Part 1 names
     for c in df.columns:
         if c in ID_COLS:
             df[c] = df[c].astype(str)
@@ -49,12 +52,15 @@ def clean_policies(df: pd.DataFrame, line: str, log: list | None = None, label: 
     note = (lambda issue, n: log.append({"line": label, "issue": issue, "rows": int(n)})) if log is not None else (lambda *a: None)
 
     width = spec.customer_id_width
+    if width is not None and "customer_id" not in df:
+        warn_once(f"{label}: no customer_id column; zero-padding skipped")
+        width = None
     if width is not None:
         short = df["customer_id"].str.len() < width
         note("customer_id lost leading zeros", short.sum())
         df["customer_id"] = df["customer_id"].str.zfill(width)
 
-    if spec.exposure_days_check:
+    if spec.exposure_days_check and {"exposure", "period_start", "period_end"} <= set(df.columns):
         days = (df["period_end"] - df["period_start"]).dt.days + 1
         expo_from_dates = days / 365
         bad = (df["exposure"] - expo_from_dates).abs() > spec.exposure_days_tol
@@ -74,11 +80,13 @@ def clean_policies(df: pd.DataFrame, line: str, log: list | None = None, label: 
     if "smoke_alarms" in df:
         df["smoke_alarms"] = df["smoke_alarms"].map({True: 1.0, False: 0.0, "True": 1.0, "False": 0.0})
 
-    if "years_licensed" in df:
+    if "years_licensed" in df and "driver_age" in df:
         imp = df["years_licensed"] > df["driver_age"] - spec.min_licence_age
         note("years_licensed impossible for driver_age", imp.sum())
         df["licence_inconsistent"] = imp
         df.loc[imp, "years_licensed"] = (df.loc[imp, "driver_age"] - spec.min_licence_age).clip(lower=0)
+    elif line == "motor":
+        warn_once(f"{label}: years_licensed/driver_age not both present; licence-age repair skipped")
 
     return df
 
@@ -132,13 +140,22 @@ def enrich(df: pd.DataFrame, customers: pd.DataFrame, addresses: pd.DataFrame, w
     """Join customer, address and same-year weather attributes onto policy rows."""
     out = df.copy()
     out["year"] = out["period_start"].dt.year
-    cu = customers.drop(columns=["surname"])
+    cu = customers.drop(columns=[c for c in ["surname"] if c in customers.columns])
     out = out.merge(cu, on="customer_id", how="left")
-    out["customer_age"] = ((out["period_start"] - out["date_of_birth"]).dt.days / 365.25).round()
-    out["customer_tenure"] = out["year"] - out["customer_since_year"]
-    out = out.drop(columns=["date_of_birth"])
+    if "date_of_birth" in out:
+        out["customer_age"] = ((out["period_start"] - out["date_of_birth"]).dt.days / 365.25).round()
+        out = out.drop(columns=["date_of_birth"])
+    else:
+        warn_once("enrich: no date_of_birth; customer_age skipped")
+    if "customer_since_year" in out:
+        out["customer_tenure"] = out["year"] - out["customer_since_year"]
+    else:
+        warn_once("enrich: no customer_since_year; customer_tenure skipped")
     out = out.merge(addresses, on="address_id", how="left")
-    out["property_age"] = out["year"] - out["year_built"]
+    if "year_built" in out:
+        out["property_age"] = out["year"] - out["year_built"]
+    else:
+        warn_once("enrich: no year_built; property_age skipped")
     out = out.merge(weather, on=["address_id", "year"], how="left")
     return out
 

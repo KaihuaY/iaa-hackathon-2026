@@ -13,6 +13,7 @@ import pandas as pd
 
 import data as D  # src/ is on sys.path (same convention as the other modules)
 import eda
+from market_spec import get_spec
 
 LINES = D.LINES
 
@@ -99,6 +100,9 @@ def _read(data_dir, name) -> pd.DataFrame | None:
         df = pd.read_parquet(p)
     except Exception:
         return None
+    alias = {a: c for a, c in get_spec().column_aliases.items() if a in df.columns and c not in df.columns}
+    if alias:
+        df = df.rename(columns=alias)       # checked under canonical names; schema_diff reads the raw schema
     for c in df.columns:
         if c in D.ID_COLS:
             df[c] = df[c].astype(str)
@@ -207,8 +211,9 @@ def _generic_checks(table, df) -> list[dict]:
     for c in _NONNEG:
         if c in df.columns and pd.api.types.is_numeric_dtype(df[c]) and not pd.api.types.is_bool_dtype(df[c]):
             out.append(_dq_row(table, "generic", f"negative {c}", c, (df[c] < 0).sum(), n))
-    if "sum_insured" in df.columns and pd.api.types.is_numeric_dtype(df["sum_insured"]):
-        out.append(_dq_row(table, "generic", "sum_insured > 1e7", "sum_insured", (df["sum_insured"] > 1e7).sum(), n))
+    thr = get_spec().si_unit_error.get(_line_of(table))      # currency-aware: the active market's own threshold
+    if thr is not None and "sum_insured" in df.columns and pd.api.types.is_numeric_dtype(df["sum_insured"]):
+        out.append(_dq_row(table, "generic", f"sum_insured > {thr:g}", "sum_insured", (df["sum_insured"] > thr).sum(), n))
     if "exposure" in df.columns and pd.api.types.is_numeric_dtype(df["exposure"]):
         out.append(_dq_row(table, "generic", "exposure > 1.01", "exposure", (df["exposure"] > 1.01).sum(), n))
     for c in df.columns:
