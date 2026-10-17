@@ -85,6 +85,9 @@ EXPERIMENTS = {
     "L16_relevant": dict(desc="L15 minus line-irrelevant / unstable features (property fields for motor, colour, roof/soil for contents)",
                          proposer="AI (stability screen + domain review)", model="lgbm", target={**FULL_T, "cap_q": 0.99},
                          features={**HIST_F, "drop": NOISE + ["make_model"], "drop_line": IRRELEVANT}),
+    "F15_freqsev": dict(desc="Frequency (Poisson GBM) x severity (Gamma GBM), L15 features and target",
+                        proposer="AI (round-2 card #1B)", model="freqsev", target={**FULL_T, "cap_q": 0.99},
+                        features={**HIST_F, "drop": NOISE + ["make_model"]}),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),

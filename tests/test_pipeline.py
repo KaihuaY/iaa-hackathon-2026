@@ -125,11 +125,30 @@ def test_lb_predictor_and_submit_gate():
     m = lbmodel.fit()
     assert m["corr"] > 0.95 and m["n"] >= 5
     assert "below noise" in lbmodel.verdict(m["best_cv"] + 0.0001, m)
-    assert "MATERIAL" in lbmodel.verdict(m["best_cv"] + 0.01, m)
+    assert "material" in lbmodel.verdict(m["best_cv"] + 0.004, m)
+    # auto-submit only for >= 5 % predicted gain that also clears the noise
+    assert not lbmodel.auto_ok(m["best_cv"] + 0.004, m)
+    assert lbmodel.auto_ok(m["best_cv"] + 0.012, m)
+    assert not lbmodel.auto_ok(m["best_cv"] - 0.01, m)
+    worse = {**m, "best_lb": -0.01}            # degenerate best score must not let a worse model through
+    assert not lbmodel.auto_ok(worse["best_cv"] - 0.001, worse)
     # submitting without --approved must be refused before anything is uploaded
     r = subprocess.run([sys.executable, "-P", "-E", str(ROOT / "scripts" / "run_experiment.py"), "X1_blend", "--reuse",
                         "--submit"], cwd=ROOT, capture_output=True, text=True)
     assert r.returncode != 0 and "approval" in (r.stdout + r.stderr)
+
+
+def test_freqsev_calibrated_and_handles_zero_cost_claims():
+    from models import make
+    rng = np.random.default_rng(2)
+    n = 20000
+    X = pd.DataFrame({"a": rng.normal(size=n)})
+    expo = rng.uniform(0.1, 1.0, n)
+    counts = rng.poisson(0.1 * expo * np.exp(0.3 * X.a))
+    y = counts * rng.gamma(2, 1500, n)
+    y[np.flatnonzero(counts > 0)[:20]] = 0.0           # nil claims: count > 0 but zero cost
+    m = make("freqsev", {"freq": {"learning_rate": 0.1}}).fit(X, y, np.ones(n), expo, n_iter=50, counts=counts)
+    assert 0.95 < m.predict(X, expo).sum() / y.sum() < 1.05
 
 
 @pytest.mark.parametrize("kind", ["lgbm", "glm"])

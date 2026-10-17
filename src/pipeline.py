@@ -25,13 +25,35 @@ def _line_data(base, line, cfg):
     return tr, te, tgt, info, X, Xt
 
 
-def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None):
+def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None, cv_=None):
     m = make(cfg["model"], cfg.get("params"))
-    if cfg["model"] in ("lgbm", "glmboost"):
+    if cfg["model"] == "freqsev":
+        m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter, counts=c, counts_val=cv_)
+    elif cfg["model"] in ("lgbm", "glmboost"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter)
     else:
         m.fit(X, y, w, e)
     return m, m.predict(Xv, ev)
+
+
+def quick(name: str, cfg: dict, seed: int = 11) -> dict:
+    """Fast screen: one 80/20 split grouped by policy (same split every run), one fit per line. No test predictions.
+    Use to triage ideas; anything promising then gets the full 5-fold CV."""
+    from sklearn.model_selection import GroupShuffleSplit
+    base = build_base()
+    ys, ps, out = [], [], {}
+    for line in LINES:
+        tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
+        y, w, e, c = tgt.y_train.values, tgt.w.values, tr.exposure.values, tr.claim_count.values
+        load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
+        a, b = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(X, groups=tr.policy_id))
+        _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
+        out[line] = d2_tweedie(tgt.y_eval.values[b], p * load)
+        ys.append(tgt.y_eval.values[b]); ps.append(p * load)
+        print(f"  quick {line:9s} D2 {out[line]:.4f}", flush=True)
+    out["overall"] = d2_tweedie(np.concatenate(ys), np.concatenate(ps))
+    print(f"  quick OVERALL D2 {out['overall']:.4f}", flush=True)
+    return out
 
 
 def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: bool = True) -> dict:
@@ -43,11 +65,11 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
     res = {"name": name, "cfg": cfg, "lines": {}}
     for line in LINES:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
-        y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
+        y, w, e, c = tgt.y_train.values, tgt.w.values, tr.exposure.values, tr.claim_count.values
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         oof, iters = np.zeros(len(tr)), []
         for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr.policy_id)):
-            m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b])
+            m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
             oof[b] = p * load
             iters.append(getattr(m, "best_iter", None))
         cv = d2_tweedie(tgt.y_eval, oof)
@@ -57,10 +79,10 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
             yr = tr.period_start.dt.year.values
             a, b = np.where(yr <= 2022)[0], np.where(yr == 2023)[0]
             n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
-            _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho)
+            _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a])
             ho = d2_tweedie(tgt.y_eval.values[b], p * load)
         n_full = int(np.mean(iters) * 1.1) if iters[0] else None
-        m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full)
+        m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full, c=c)
         imp = m.importance().head(25).to_dict() if hasattr(m, "importance") else {}
         res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
                               "test_row_id": te.row_id.values, "test_pred": pt * load, "cv": cv, "holdout": ho, "calibration": calib,
@@ -85,14 +107,18 @@ def run_blend(name: str, cfg: dict, folds: int = 5) -> dict:
     Also reports nested CV: the weight is chosen on 4 folds and applied to the 5th (same GroupKFold by policy as the
     models), so the blend's own weight choice cannot flatter its score."""
     a, b = (load(p) for p in cfg["parts"])
+    for part in (a, b):   # a blend part's OOF used full-sample weights, which would flatter the nested score
+        assert part["cfg"]["model"] != "blend", "blend parts must be single models"
     res = {"name": name, "cfg": cfg, "lines": {}}
     nested_y, nested_p = [], []
     for line in LINES:
         la, lb = a["lines"][line], b["lines"][line]
         y, pa, pb = la["y_eval"], la["oof"], lb["oof"]
         g, score = _best_weight(y, pa, pb)
-        groups = pd.read_parquet(CACHE / f"train_{line}.parquet", columns=["policy_id"]).policy_id.values
-        assert len(groups) == len(y)
+        ids = pd.read_parquet(CACHE / f"train_{line}.parquet", columns=["row_id", "policy_id"])
+        groups = ids.policy_id.values
+        assert (la["row_id"] == lb["row_id"]).all() and (la["row_id"] == ids.row_id.values).all(), "OOF rows misaligned"
+        assert (la["test_row_id"] == lb["test_row_id"]).all(), "test rows misaligned"
         nest = np.zeros_like(y, dtype=float)
         for tr_idx, va_idx in GroupKFold(folds).split(y, groups=groups):
             gk, _ = _best_weight(y[tr_idx], pa[tr_idx], pb[tr_idx])

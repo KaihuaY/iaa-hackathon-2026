@@ -82,6 +82,8 @@ def trend_index(train: pd.DataFrame, test: pd.DataFrame, method: str, pp_by_year
         return {y: float(idx[target_year] / idx[y]) for y in years}
     if method == "claims":
         fit_years = [y for y in (2021, 2022, 2023) if y < target_year]
+        if len(fit_years) < 2:                    # a slope needs two points (review fix)
+            return {y: 1.0 for y in years}
         pp = pp_by_year.loc[fit_years]
         slope = np.polyfit(pp.index.values, np.log(pp.values), 1)[0]
         return {y: float(np.exp(slope * (target_year - y))) for y in years}
