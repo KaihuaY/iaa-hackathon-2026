@@ -39,7 +39,7 @@ DECISIONS = [
     },
     {
         "id": "submit_now", "impact": "High", "multi": False,
-        "title": "Submit X6 (3-way de-noised, tuned, seed-bagged blend)? Predicted LB 0.1275 vs best 0.1249 (+2.1 %)",
+        "title": "Next submission candidate (X10 submitted: public LB 0.12749, #1). Level probe approved for 18 Oct.",
         "why": "X6 = GLM+boost + tuned Tweedie GBM + tuned frequency x severity GBM (both averaged over 3 seeds), noise features removed. "
                "Nested CV 0.1584 vs X1 0.1552 (same as X5, more robust); "
                "first candidate whose predicted gain (+0.0026) clears the noise band (+-0.0022). "

@@ -114,7 +114,8 @@ fig.show()
 steps = [("E1_glm", "GLM, raw labels"), ("G3_dev", "+ develop to ultimate"), ("G4_cap", "+ cap large losses"),
          ("G6_trend", "+ experience, trend, weights"), ("B6_boost", "+ GBM boosting from GLM"),
          ("L6_lgbm", "standalone GBM"), ("X1_blend", "blend B6 + L6"), ("X2_blend", "blend, cap 99%"),
-         ("X3_blend", "blend, noise features removed"), ("X4_blend3", "3-way blend + freq x sev"), ("X5_blend3", "3-way blend, tuned GBMs"), ("X6_blend3bag", "X5 + seed bagging")]
+         ("X3_blend", "blend, noise features removed"), ("X4_blend3", "3-way blend + freq x sev"), ("X5_blend3", "3-way blend, tuned GBMs"), ("X6_blend3bag", "X5 + seed bagging"), ("L19_segload", "segment loading"),
+         ("L20_mono_lowreg", "+ monotone, less reg."), ("X10_blend4", "4-way blend + CatBoost + credibility")]
 st = log.set_index("exp").reindex([s for s, _ in steps])
 lab = [f"{s}<br>{t}" for s, t in steps]
 fig = make_subplots(rows=1, cols=2, column_widths=[0.4, 0.6], subplot_titles=("Overall CV", "CV by line"), horizontal_spacing=0.08)
@@ -137,7 +138,7 @@ fig.show()
 # ## 4 · Day-2 local experiments (single changes vs L6, CV only, no submissions used)
 
 # %%
-d2 = log[log.exp.str.match(r"(L(7|8|9|1[0-7])|F1[57]|P15)_")].copy()
+d2 = log[log.exp.str.match(r"(L(7|8|9|1[0-9]|20)|F1[57]|P15|A[123]|S1|X[3-9]|X10|OPT|P20)_")].copy()
 base_cv = log.set_index("exp").loc["L6_lgbm", "cv"]
 d2["vs L6"] = d2.cv - base_cv
 display(fmt_table(d2[["exp", "description", "cv", "vs L6", "holdout_2023", "decision"]].set_index("exp"),
@@ -211,7 +212,7 @@ else:
 # %%
 best_parts = {"GLM+boost": "B10_cap99", "GBM": "L10_cap99"}
 fig = make_subplots(rows=1, cols=3, subplot_titles=[f"{l}: top 12 features (GBM gain)" for l in LINES], horizontal_spacing=0.14)
-gbm = load("L17_tuned")
+gbm = load("L20_mono_lowreg")
 for i, l in enumerate(LINES, start=1):
     imp = pd.Series(gbm["lines"][l]["importance"]).sort_values(ascending=False).head(12)[::-1]
     fig.add_bar(y=imp.index, x=imp.values / imp.values.sum(), orientation="h", marker_color=LINE_COLOURS[l],
@@ -220,7 +221,7 @@ fig.update_xaxes(tickformat=".0%")
 fig.update_layout(height=460)
 fig.show()
 
-bl = load("X6_blend3bag")
+bl = load("X10_blend4")
 w = pd.DataFrame({l: {**{f"w {k}": v for k, v in bl["lines"][l]["weights"].items()},
                       "blend CV": bl["lines"][l]["cv"], "nested CV": bl["lines"][l].get("cv_nested", np.nan)} for l in LINES}).T
 display(Markdown("**Blend weights per line** (chosen on CV; the nested CV picks the weight out-of-fold, so it is an honest score):"))
