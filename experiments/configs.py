@@ -38,4 +38,15 @@ EXPERIMENTS = {
                      model="glmboost", target=FULL_T, features=HIST_F),
     "L6_lgbm": dict(desc="Standalone regularised Tweedie GBM, G6 target/features (challenger)", proposer="user (#1)",
                     model="lgbm", target=FULL_T, features=HIST_F),
+    # Day 2 candidates (each a single change vs G6, LB 0.11716)
+    "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
+                   model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
+    "G8_trendB": dict(desc="G6 with claims-based trend instead of premium index", proposer="user (trend: start D, test B)",
+                      model="glm", target={**FULL_T, "trend": "claims"}, features=HIST_F),
+    "G9_bins": dict(desc="G6 with finer GLM bands (20) and more category levels (60)", proposer="AI",
+                    model="glm", params={"n_bins": 20, "top": 60}, target=FULL_T, features=HIST_F),
+    "G10_cap99": dict(desc="G6 with cap at 99th pct", proposer="AI (cap level sensitivity)",
+                      model="glm", target={**FULL_T, "cap_q": 0.99}, features=HIST_F),
+    "G11_cap999": dict(desc="G6 with cap at 99.9th pct", proposer="AI (cap level sensitivity)",
+                       model="glm", target={**FULL_T, "cap_q": 0.999}, features=HIST_F),
 }

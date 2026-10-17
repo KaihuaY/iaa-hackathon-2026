@@ -87,6 +87,10 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
         drop.add("written_premium")
     cols = [c for c in train.columns if c not in drop and c in test.columns]
     X, Xt = train[cols].copy(), test[cols].copy()
+    if cfg.get("hist_nan_2021", False):
+        # Data starts in 2021, so those rows' history is unobservable, not "no claims" (else history proxies the year).
+        hist = [c for c in cols if c.startswith(("pol_", "cust_"))]
+        X.loc[train.year.values == 2021, hist] = np.nan
     if cfg.get("weather_pca"):
         from sklearn.decomposition import PCA
         w = [c for c in WEATHER if c in X]
