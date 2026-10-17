@@ -25,7 +25,7 @@ def _line_data(base, line, cfg):
 
 def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None):
     m = make(cfg["model"], cfg.get("params"))
-    if cfg["model"] == "lgbm":
+    if cfg["model"] in ("lgbm", "glmboost"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter)
     else:
         m.fit(X, y, w, e)

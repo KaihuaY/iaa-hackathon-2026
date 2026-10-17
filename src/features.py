@@ -93,6 +93,9 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
             for i in range(comp.shape[1]):
                 d[f"weather_pc{i + 1}"] = comp[:, i]
             d.drop(columns=w, inplace=True)
+    for d in (X, Xt):                                     # halve memory: float64 -> float32
+        f64 = d.select_dtypes("float64").columns
+        d[f64] = d[f64].astype("float32")
     cats = []
     for c in X.columns:
         if X[c].dtype == object or X[c].dtype == bool or str(X[c].dtype) == "category":

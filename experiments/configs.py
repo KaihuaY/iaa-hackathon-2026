@@ -27,4 +27,15 @@ EXPERIMENTS = {
                         model="glm", target=FULL_T, features=HIST_F),
     "E8_blend": dict(desc="Blend E6 LightGBM + E7 GLM, weights per line on CV", proposer="user (decision board #9)",
                      model="blend", parts=["E6_trend", "E7_glm_full"]),
+    # After the 17 Oct diagnostic: standalone GBM only matched the GLM, so the GLM is the base and the GBM boosts from it.
+    "G3_dev": dict(desc="GLM + develop to ultimate (BF IBNR)", proposer="user (#3), AI re-sequenced onto GLM",
+                   model="glm", target=DEV, features=BASE_F),
+    "G4_cap": dict(desc="G3 + cap 99.5th pct with loading", proposer="user (#5)", model="glm", target=DEV_CAP, features=BASE_F),
+    "G5_hist": dict(desc="G4 + experience rating", proposer="user (#2)", model="glm", target=DEV_CAP, features=HIST_F),
+    "G6_trend": dict(desc="G5 + premium-index trend to 2025 + maturity weights", proposer="user (#6/#7)",
+                     model="glm", target=FULL_T, features=HIST_F),
+    "B6_boost": dict(desc="G6 GLM + regularised Tweedie GBM boosting from the GLM", proposer="AI (after GBM diagnostic)",
+                     model="glmboost", target=FULL_T, features=HIST_F),
+    "L6_lgbm": dict(desc="Standalone regularised Tweedie GBM, G6 target/features (challenger)", proposer="user (#1)",
+                    model="lgbm", target=FULL_T, features=HIST_F),
 }
