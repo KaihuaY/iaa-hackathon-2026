@@ -114,7 +114,7 @@ fig.show()
 steps = [("E1_glm", "GLM, raw labels"), ("G3_dev", "+ develop to ultimate"), ("G4_cap", "+ cap large losses"),
          ("G6_trend", "+ experience, trend, weights"), ("B6_boost", "+ GBM boosting from GLM"),
          ("L6_lgbm", "standalone GBM"), ("X1_blend", "blend B6 + L6"), ("X2_blend", "blend, cap 99%"),
-         ("X3_blend", "blend, noise features removed"), ("X4_blend3", "3-way blend + freq x sev"), ("X5_blend3", "3-way blend, tuned GBMs")]
+         ("X3_blend", "blend, noise features removed"), ("X4_blend3", "3-way blend + freq x sev"), ("X5_blend3", "3-way blend, tuned GBMs"), ("X6_blend3bag", "X5 + seed bagging")]
 st = log.set_index("exp").reindex([s for s, _ in steps])
 lab = [f"{s}<br>{t}" for s, t in steps]
 fig = make_subplots(rows=1, cols=2, column_widths=[0.4, 0.6], subplot_titles=("Overall CV", "CV by line"), horizontal_spacing=0.08)
@@ -220,7 +220,7 @@ fig.update_xaxes(tickformat=".0%")
 fig.update_layout(height=460)
 fig.show()
 
-bl = load("X5_blend3")
+bl = load("X6_blend3bag")
 w = pd.DataFrame({l: {**{f"w {k}": v for k, v in bl["lines"][l]["weights"].items()},
                       "blend CV": bl["lines"][l]["cv"], "nested CV": bl["lines"][l].get("cv_nested", np.nan)} for l in LINES}).T
 display(Markdown("**Blend weights per line** (chosen on CV; the nested CV picks the weight out-of-fold, so it is an honest score):"))

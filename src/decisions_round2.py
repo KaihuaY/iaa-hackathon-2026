@@ -39,12 +39,13 @@ DECISIONS = [
     },
     {
         "id": "submit_now", "impact": "High", "multi": False,
-        "title": "Submit X5 (3-way de-noised, tuned blend)? Predicted LB 0.1275 vs best 0.1249 (+2.1 %)",
-        "why": "X5 = GLM+boost + tuned Tweedie GBM + tuned frequency x severity GBM, noise features removed. Nested CV 0.1584 vs X1 0.1552; "
+        "title": "Submit X6 (3-way de-noised, tuned, seed-bagged blend)? Predicted LB 0.1275 vs best 0.1249 (+2.1 %)",
+        "why": "X6 = GLM+boost + tuned Tweedie GBM + tuned frequency x severity GBM (both averaged over 3 seeds), noise features removed. "
+               "Nested CV 0.1584 vs X1 0.1552 (same as X5, more robust); "
                "first candidate whose predicted gain (+0.0026) clears the noise band (+-0.0022). "
                "Below the 5 % auto-submit bar (needs predicted 0.1311). You held X3 (+1.5 %) earlier to keep stacking.",
         "options": [
-            {"key": "A", "label": "Yes, submit X5 (1 submission)",
+            {"key": "A", "label": "Yes, submit X6 (1 submission)",
              "pros": "Gain is consistent across lines and on the 2023 holdout, with a clear mechanism (noise features removed); "
                      "removing noise should also help on the private leaderboard.",
              "cons": "Below the 5 % auto-submit bar; gain is modest in absolute terms.", "rec": True},
