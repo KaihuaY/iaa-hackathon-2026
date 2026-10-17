@@ -71,6 +71,10 @@ EXPERIMENTS = {
                            features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "B14_denoise": dict(desc="B10 (GLM+boost) minus noise features", proposer="AI (feature stability screen)",
                         model="glmboost", target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE}),
+    "B15_denoise_mm": dict(desc="B14 also without make_model", proposer="AI (feature stability screen)",
+                           model="glmboost", target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "X3_blend": dict(desc="Per-line blend of B15 and L15 (de-noised, cap 99%)", proposer="user (#9) + AI", model="blend",
+                     parts=["B15_denoise_mm", "L15_denoise_mm"]),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
