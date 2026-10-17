@@ -17,6 +17,10 @@ IRRELEVANT = {
 
 BASE_F = {"history": False}
 HIST_F = {"history": True}
+# Directions any pricing actuary would expect (+1 = cost rises with the feature); missing features are ignored.
+MONOTONE = {"voluntary_excess": -1, "ncb_years": -1, "prior_claims_5y": 1, "licence_points": 1, "pol_claims": 1,
+            "cust_claims": 1, "missed_payments_12m": 1, "vehicle_value_group": 1, "annual_mileage": 1,
+            "sum_insured": 1, "flood_zone": 1, "high_value_items": 1}
 
 EXPERIMENTS = {
     "E0_const": dict(desc="Average cost per line x exposure (pipeline / metric check vs host's 0.072)", proposer="AI",
@@ -101,6 +105,10 @@ EXPERIMENTS = {
                         proposer="AI (residual scan: third_party_only 1.09x)", model="lgbm", params=TUNED,
                         target={**FULL_T, "cap_q": 0.99, "loading": "segment"},
                         features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "L20_mono_lowreg": dict(desc="L17 features/target, min leaf 2000 + monotone constraints (less regularisation, drift guarded)",
+                            proposer="AI (residual scan: tails flattened by regularisation)", model="lgbm",
+                            params={**TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE},
+                            target={**FULL_T, "cap_q": 0.99, "loading": "segment"}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "F17_freqsev": dict(desc="F15 with the same tuned frequency GBM", proposer="AI (quick-screen tuning)",
                         model="freqsev", params={"freq": TUNED}, target={**FULL_T, "cap_q": 0.99},
                         features={**HIST_F, "drop": NOISE + ["make_model"]}),

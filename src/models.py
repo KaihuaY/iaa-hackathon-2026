@@ -26,7 +26,9 @@ class LGBMTweedie:
     Predictions are rebalanced so the in-sample predicted total equals the actual total."""
 
     def __init__(self, params=None, rounds=3000, early_stop=200):
-        self.params = {**LGBM_DEFAULT, **(params or {})}
+        params = dict(params or {})
+        self.monotone = params.pop("monotone", {})          # {feature: +1 / -1}: actuarially expected direction
+        self.params = {**LGBM_DEFAULT, **params}
         self.rounds, self.early_stop = rounds, early_stop
         self.best_iter = None
 
@@ -36,6 +38,9 @@ class LGBMTweedie:
 
     def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None,
             margin=None, margin_val=None):
+        if self.monotone:
+            self.params["monotone_constraints"] = [int(self.monotone.get(c, 0)) for c in X.columns]
+            self.params["monotone_constraints_method"] = "advanced"
         self.base = float(np.log(np.sum(w * y) / np.sum(w * expo)))
         dtr = lgb.Dataset(X, y, weight=w, init_score=self._start(expo, margin), categorical_feature="auto")
         if X_val is not None and n_iter is None:
