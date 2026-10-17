@@ -113,7 +113,8 @@ fig.show()
 # %%
 steps = [("E1_glm", "GLM, raw labels"), ("G3_dev", "+ develop to ultimate"), ("G4_cap", "+ cap large losses"),
          ("G6_trend", "+ experience, trend, weights"), ("B6_boost", "+ GBM boosting from GLM"),
-         ("L6_lgbm", "standalone GBM"), ("X1_blend", "blend B6 + L6"), ("X2_blend", "blend, cap 99%")]
+         ("L6_lgbm", "standalone GBM"), ("X1_blend", "blend B6 + L6"), ("X2_blend", "blend, cap 99%"),
+         ("X3_blend", "blend, noise features removed")]
 st = log.set_index("exp").reindex([s for s, _ in steps])
 lab = [f"{s}<br>{t}" for s, t in steps]
 fig = make_subplots(rows=1, cols=2, column_widths=[0.4, 0.6], subplot_titles=("Overall CV", "CV by line"), horizontal_spacing=0.08)
@@ -136,11 +137,47 @@ fig.show()
 # ## 4 · Day-2 local experiments (single changes vs L6, CV only, no submissions used)
 
 # %%
-d2 = log[log.exp.str.match(r"L(7|8|9|1[0-3])_")].copy()
+d2 = log[log.exp.str.match(r"L(7|8|9|1[0-5])_")].copy()
 base_cv = log.set_index("exp").loc["L6_lgbm", "cv"]
 d2["vs L6"] = d2.cv - base_cv
 display(fmt_table(d2[["exp", "description", "cv", "vs L6", "holdout_2023", "decision"]].set_index("exp"),
                   {"cv": "{:.4f}", "vs L6": "{:+.4f}", "holdout_2023": "{:.4f}"}))
+
+# %% [markdown]
+# ### 4a · Feature stability screen: why removing features helped
+# A genuine rating factor ranks its levels the same way every year. For each categorical feature, we correlate its
+# levels' claim frequency in 2021–22 with 2023. `previous_insurer`, `branch_id`, `email_domain` and `campaign_code` show no
+# year-to-year consistency (≈ 0), so they are noise the GBM was fitting. `make_model` (300 levels) is only weakly stable, and
+# dropping it lifted motor CV by +0.004. Fewer, honest features: better CV, better 2023 holdout, and a simpler model.
+
+# %%
+import sys as _s
+from features import build_base, model_matrix
+_b = build_base()
+rows = []
+for l in LINES:
+    tr = _b[f"train_{l}"]
+    for c in ["previous_insurer", "branch_id", "email_domain", "campaign_code", "make_model", "occupation", "region",
+              "marketing_segment", "credit_band", "channel"]:
+        if c not in tr:
+            continue
+        s = tr[c].astype(str)
+        def rel(mask):
+            g = tr[mask].groupby(s[mask]).agg(n=("claim_count", "sum"), e=("exposure", "sum"))
+            g = g[g.e > 300]
+            return g.n / g.e
+        j = pd.concat([rel(tr.year.values <= 2022), rel(tr.year.values == 2023)], axis=1, keys=["a", "z"]).dropna()
+        rows.append({"line": l, "feature": c, "levels": s.nunique(), "stability": j.a.corr(j.z)})
+stab = pd.DataFrame(rows).pivot_table(index="feature", columns="line", values="stability")
+stab = stab.reindex(stab.mean(axis=1).sort_values().index)
+fig = go.Figure(go.Heatmap(z=stab.values, x=stab.columns, y=stab.index, zmin=-1, zmax=1,
+                           colorscale=[[0, "#e34948"], [0.5, "#f0efec"], [1, "#2a78d6"]],
+                           text=stab.round(2).values, texttemplate="%{text}",
+                           hovertemplate="%{y} · %{x}<br>year-to-year stability %{z:.2f}<extra></extra>",
+                           colorbar=dict(title="stability", thickness=12)))
+fig.update_layout(height=420, title="Year-to-year stability of level frequencies (1 = consistent risk signal, 0 = noise)")
+fig.show()
+del _b
 
 # %% [markdown]
 # ## 5 · Trend backtest: which trend projects costs best?

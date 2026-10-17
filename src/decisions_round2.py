@@ -38,13 +38,17 @@ DECISIONS = [
         "suggest": "A. No submission needed.",
     },
     {
-        "id": "submit_now", "impact": "Medium", "multi": False,
-        "title": "Submit X2 (cap 99 % blend) now?",
-        "why": "Predicted LB 0.1250 vs current best 0.1249: a difference far inside the ±0.002 noise.",
+        "id": "submit_now", "impact": "High", "multi": False,
+        "title": "Submit X3 (de-noised blend)? Predicted LB 0.1267 vs best 0.1249",
+        "why": "Biggest local gain since blending: nested CV +0.0022, every line up, GBM holdout +0.005. "
+               "X2 (cap 99 %, +0.0001) was not worth a submission and was skipped.",
         "options": [
-            {"key": "A", "label": "No, wait for a material improvement", "pros": "Saves the budget; the LB wouldn't tell us anything.",
-             "cons": "None.", "rec": True},
-            {"key": "B", "label": "Yes, submit it", "pros": "Confirms the 99 % cap on the LB.", "cons": "Result will be within noise."},
+            {"key": "A", "label": "Yes, submit X3 (1 submission)",
+             "pros": "Gain is consistent across lines and on the 2023 holdout, with a clear mechanism (noise features removed); "
+                     "removing noise should also help on the private leaderboard.",
+             "cons": "Predicted gain (+0.0018) sits just under the ±0.002 noise band.", "rec": True},
+            {"key": "B", "label": "Wait and stack more improvements first", "pros": "One bigger, clearer jump later.",
+             "cons": "No LB confirmation that the de-noising transfers."},
         ],
         "suggest": "A.",
     },
