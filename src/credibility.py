@@ -7,8 +7,8 @@ from sklearn.model_selection import GroupKFold
 from metrics import d2_tweedie, tweedie_deviance
 
 COMPLETENESS_2024 = {"motor": 0.920, "buildings": 0.939, "contents": 0.960}
-K_GRID = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 1e9]
-ALPHA_GRID = [1e-4, 1e-3, 1e-2, 1e-1, 1.0]
+K_GRID = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 1e9]
+ALPHA_GRID = [1e-4, 1e-3, 1e-2, 1e-1, 0.3, 1.0, 3.0]
 MIN_LEVEL_ROWS = 500
 
 
@@ -30,6 +30,7 @@ def buhlmann_terms(train_df, test_df, oof, y_eval, completeness_2024, cap_q=0.99
     cap = np.quantile(pos, cap_q) if len(pos) else np.inf
     comp = np.where(train_df["year"].to_numpy() == 2024, 1.0 / completeness_2024, 1.0)
     capped = np.minimum(y_eval, cap)
+    capped = capped * (oof.sum() / capped.sum())  # population ratio of A_c to P is 1 (cap removes mass from A only)
     a_n = np.nan_to_num(train_df["claim_count"].to_numpy(float)) * comp
     sev = float(capped.sum() / a_n.sum()) if a_n.sum() > 0 else 0.0
 
@@ -98,7 +99,7 @@ def buhlmann_select(y, mu, terms, sev, folds, variant):
 
 
 # ---------------------------------------------------------------- Part 2
-def segment_design(train_df, test_df):
+def segment_design(train_df, test_df, include_levels=False):
     """Sparse 0/1 design matrices (train, test) with identical columns; returns (Dtr, Dte, names)."""
     cols_tr, cols_te, names = [], [], []
 
@@ -110,7 +111,7 @@ def segment_design(train_df, test_df):
     def has(c):
         return c in train_df.columns and c in test_df.columns
 
-    for feat in ("make_model", "previous_insurer"):
+    for feat in (("make_model", "previous_insurer") if include_levels else ()):
         if not has(feat):
             continue
         a, b = train_df[feat].astype(object), test_df[feat].astype(object)
@@ -196,7 +197,7 @@ def _segment_defs(line, tr, sum_q):
     return segs
 
 
-def correct(name, use_buhlmann=True, use_segments=True):
+def correct(name, use_buhlmann=True, use_segments=True, include_levels=False):
     import pipeline
     from data import LINES
     from features import CACHE
@@ -240,13 +241,19 @@ def correct(name, use_buhlmann=True, use_segments=True):
                             "d2_cost_nested": sels["cost"]["d2_nested"], "d2_count_nested": sels["count"]["d2_nested"]}
             else:
                 ks[line] = {"variant": "none", "k": None}
+            if ks[line]["variant"] != "none":
+                _m = (cur / mu)[ttr["E"] > 0]
+                q = np.percentile(_m, [5, 50, 95])
+                print(f"  Buhlmann multiplier (E>0 train rows) p5/p50/p95: {q[0]:.3f} / {q[1]:.3f} / {q[2]:.3f}")
+            else:
+                print("  Buhlmann multiplier: none")
             print(f"  -> kept: {ks[line]['variant']}  D2 {d2_b:.5f}")
 
         d2_s = d2_b
         mults[line] = {}
         alphas[line] = None
         if use_segments:
-            Dtr, Dte, names = segment_design(tr, te)
+            Dtr, Dte, names = segment_design(tr, te, include_levels)
             nest = segment_nested(y, cur, Dtr, folds)
             for a, (_, sc) in nest.items():
                 print(f"  segments alpha={a:g}: nested D2 {sc:.5f}")
@@ -286,7 +293,7 @@ def correct(name, use_buhlmann=True, use_segments=True):
     res_out.update({"name": name + "_cred", "lines": out_lines, "cv": d2_after, "cv_nested": d2_after,
                     "holdout": np.nan, "multipliers": mults, "k": ks, "alpha": alphas,
                     "cfg": {"model": "correction", "base": name, "use_buhlmann": use_buhlmann,
-                            "use_segments": use_segments, "desc": "Buhlmann experience rating + ridge segment layer"}})
+                            "use_segments": use_segments, "include_levels": include_levels, "desc": "Buhlmann experience rating + ridge segment layer"}})
     pipeline._save(res_out)
     print(f"saved {res_out['name']}")
     return res_out

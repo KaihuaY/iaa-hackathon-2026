@@ -72,6 +72,6 @@ def test_no_future_information():
     p21 = pd.Series(o[y21], index=d21.index)
     r22 = train[y22]
     np.testing.assert_allclose(tt["E"][y22], d21.loc[r22.policy_id, "exposure"].to_numpy())
-    np.testing.assert_allclose(tt["A_c"][y22], d21.loc[r22.policy_id, "claim_cost"].to_numpy() * 2.0)
+    np.testing.assert_allclose(tt["A_c"][y22], d21.loc[r22.policy_id, "claim_cost"].to_numpy() * 2.0 * (o.sum() / yv.sum()))  # A_c rescaled to sum(P)
     np.testing.assert_allclose(tt["A_n"][y22], d21.loc[r22.policy_id, "claim_count"].to_numpy())
     np.testing.assert_allclose(tt["P"][y22], p21.loc[r22.policy_id].to_numpy())
