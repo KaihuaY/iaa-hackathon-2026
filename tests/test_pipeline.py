@@ -71,6 +71,17 @@ def test_history_uses_only_prior_years(base):
     assert np.allclose(t.pol_claims.values, t.policy_id.map(prior).fillna(0).values)
 
 
+def test_history_window_is_stable_across_years(base):
+    """History features must mean the same thing in every year (bounded look-back), incl. the 2025 test set."""
+    from features import LOOKBACK
+    for l in LINES:
+        for d in (base[f"train_{l}"], base[f"test_{l}"]):
+            assert d.pol_expo.max() <= LOOKBACK + 0.05
+    tr, te = base["train_motor"], base["test_motor"]
+    m24, m25 = tr.loc[tr.year == 2024, "pol_expo"].mean(), te.pol_expo.mean()
+    assert abs(m25 / m24 - 1) < 0.1, (m24, m25)
+
+
 def test_claims_fall_inside_row_period(base):
     c = base["claims"].dropna(subset=["row_id"])
     rows = pd.concat([base[f"train_{l}"][["row_id", "period_start", "period_end"]] for l in LINES])

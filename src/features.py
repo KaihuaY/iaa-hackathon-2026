@@ -14,14 +14,18 @@ DROP = ["row_id", "policy_id", "customer_id", "address_id", "period_start", "per
         "claim_cost", "year", "compulsory_excess", "customer_since_year", "year_built", "exposure"] + LEAKY_COLS
 
 
+LOOKBACK = 2  # years. A fixed window keeps history features comparable across years; cumulative totals grew
+               # every year, so the model learned "more history = later year" and extrapolated on 2025 (G5, 17 Oct).
+
+
 def _prior(rows: pd.DataFrame, key: str, prefix: str) -> pd.DataFrame:
-    """Exposure and claim count for `key` summed over years strictly before each row's year."""
+    """Exposure and claim count for `key` over the LOOKBACK years strictly before each row's year."""
     agg = rows.groupby([key, "year"]).agg(e=("exposure", "sum"), n=("claim_count", "sum")).unstack("year")
     agg = agg.reindex(columns=pd.MultiIndex.from_product([["e", "n"], YEARS]), fill_value=0).fillna(0)
     out = []
     for m in ["e", "n"]:
-        cum = agg[m].cumsum(axis=1).shift(1, axis=1).fillna(0)        # strictly prior years
-        out.append(cum.stack().rename(f"{prefix}_{'expo' if m == 'e' else 'claims'}"))
+        win = sum(agg[m].shift(k, axis=1).fillna(0) for k in range(1, LOOKBACK + 1))   # years Y-1 .. Y-LOOKBACK
+        out.append(win.stack().rename(f"{prefix}_{'expo' if m == 'e' else 'claims'}"))
     return pd.concat(out, axis=1).rename_axis([key, "year"]).reset_index()
 
 
