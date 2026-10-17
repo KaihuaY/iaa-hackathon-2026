@@ -19,7 +19,9 @@ RESULTS = Path(__file__).resolve().parents[1] / "experiments" / "results"
 def _line_data(base, line, cfg):
     tr, te = base[f"train_{line}"], base[f"test_{line}"]
     tgt, info = prepare_target(tr, te, base["claims"], line, cfg.get("target", {}))
-    X, Xt, cats = model_matrix(tr, te, cfg.get("features", {}))
+    fcfg = dict(cfg.get("features", {}))
+    fcfg["drop"] = list(fcfg.get("drop", [])) + list(fcfg.get("drop_line", {}).get(line, []))
+    X, Xt, cats = model_matrix(tr, te, fcfg)
     return tr, te, tgt, info, X, Xt
 
 

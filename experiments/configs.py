@@ -6,6 +6,13 @@ DEV_CAP = {**DEV, "cap_q": 0.995}
 FULL_T = {**DEV_CAP, "trend": "premium", "weight_power": 1.0}
 
 NOISE = ["previous_insurer", "branch_id", "email_domain", "campaign_code"]
+# Features with no plausible link to the line's perils and/or unstable year to year (17 Oct screen)
+IRRELEVANT = {
+    "motor": ["roof_type", "soil_type", "energy_rating", "basement", "trees_within_5m", "listed_building", "solar_panels",
+              "bedrooms", "vehicle_colour", "flood_zone", "distance_to_river_km", "elevation_m", "property_age"],
+    "contents": ["roof_type", "soil_type"],
+    "buildings": ["document_preference"],
+}
 
 BASE_F = {"history": False}
 HIST_F = {"history": True}
@@ -75,6 +82,9 @@ EXPERIMENTS = {
                            model="glmboost", target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "X3_blend": dict(desc="Per-line blend of B15 and L15 (de-noised, cap 99%)", proposer="user (#9) + AI", model="blend",
                      parts=["B15_denoise_mm", "L15_denoise_mm"]),
+    "L16_relevant": dict(desc="L15 minus line-irrelevant / unstable features (property fields for motor, colour, roof/soil for contents)",
+                         proposer="AI (stability screen + domain review)", model="lgbm", target={**FULL_T, "cap_q": 0.99},
+                         features={**HIST_F, "drop": NOISE + ["make_model"], "drop_line": IRRELEVANT}),
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
