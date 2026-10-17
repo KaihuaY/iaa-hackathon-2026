@@ -58,8 +58,9 @@ def quick(name: str, cfg: dict, seed: int = 11) -> dict:
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         a, b = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(X, groups=tr.policy_id))
         _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
-        out[line] = d2_tweedie(tgt.y_eval.values[b], p * load)
-        ys.append(tgt.y_eval.values[b]); ps.append(p * load)
+        lb = info["loading_rows"][b] if "loading_rows" in info else load
+        out[line] = d2_tweedie(tgt.y_eval.values[b], p * lb)
+        ys.append(tgt.y_eval.values[b]); ps.append(p * lb)
         print(f"  quick {line:9s} D2 {out[line]:.4f}", flush=True)
     out["overall"] = d2_tweedie(np.concatenate(ys), np.concatenate(ps))
     print(f"  quick OVERALL D2 {out['overall']:.4f}", flush=True)
@@ -81,7 +82,7 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
         oof, iters = np.zeros(len(tr)), []
         for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr.policy_id)):
             m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
-            oof[b] = p * load
+            oof[b] = p * (info["loading_rows"][b] if "loading_rows" in info else load)
             iters.append(getattr(m, "best_iter", None))
         cv = d2_tweedie(tgt.y_eval, oof)
         calib = float(oof.sum() / tgt.y_eval.sum())          # predicted / actual total cost (guardrail: ~1)
@@ -91,16 +92,17 @@ def run(name: str, cfg: dict, folds: int = 5, holdout: bool = True, verbose: boo
             a, b = np.where(yr <= 2022)[0], np.where(yr == 2023)[0]
             n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
             _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a])
-            ho = d2_tweedie(tgt.y_eval.values[b], p * load)
+            ho = d2_tweedie(tgt.y_eval.values[b], p * (info["loading_rows"][b] if "loading_rows" in info else load))
         n_full = int(np.mean(iters) * 1.1) if iters[0] else None
         m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full, c=c)
+        pt_load = info.get("loading_test", load)                 # per-row array if segment loading, else scalar
         imp = m.importance().head(25).to_dict() if hasattr(m, "importance") else {}
         res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
-                              "test_row_id": te.row_id.values, "test_pred": pt * load, "cv": cv, "holdout": ho, "calibration": calib,
+                              "test_row_id": te.row_id.values, "test_pred": pt * pt_load, "cv": cv, "holdout": ho, "calibration": calib,
                               "info": info, "iters": iters, "importance": imp}
         if verbose:
             print(f"  {line:9s} CV D2 {cv:.4f} | 2023 holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
-                  f"| test mean {np.mean(pt * load):,.1f}", flush=True)
+                  f"| test mean {np.mean(pt * pt_load):,.1f}", flush=True)
     _summarise(res)
     res["minutes"] = (time.time() - t0) / 60
     _save(res)

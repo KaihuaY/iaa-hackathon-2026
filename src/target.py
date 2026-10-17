@@ -119,6 +119,37 @@ def peril_matrix(pol: pd.DataFrame, claims: pd.DataFrame, line: str, tgt: pd.Dat
     return M, list(tab.columns)
 
 
+def _segments(pol: pd.DataFrame, test: pd.DataFrame, line: str) -> tuple[pd.Series, pd.Series]:
+    """Segment label per row of pol and test (NaN where a component is missing)."""
+    if line == "motor":
+        def lab(d):
+            band = pd.cut(d.driver_age, [-np.inf, 25, 35, 60, np.inf], right=False,
+                          labels=["<25", "25-34", "35-59", "60+"]).astype(object)
+            return (d.cover_type.astype(object).astype(str) + "|" + band.astype(str)).where(band.notna() & d.cover_type.notna())
+        return lab(pol), lab(test)
+    edges = np.nanquantile(pol.sum_insured, [0.25, 0.5, 0.75])
+    def lab(d):
+        q = pd.Series(np.searchsorted(edges, d.sum_insured.values, side="right"), index=d.index)
+        return ("SIQ" + (q + 1).astype(str)).where(d.sum_insured.notna())
+    return lab(pol), lab(test)
+
+
+def segment_loading(pol, test, lc, cost, capped, line, K=200):
+    """Credibility-shrunk large-loss loading per segment: 1 + (n r_s + K r) / (n + K), r = excess / capped (mature claims).
+    Returns (load_train per pol row, load_test per test row, table)."""
+    sp, st = _segments(pol, test, line)
+    mature = (lc.loss_date.dt.year <= 2023) & lc.row_id.notna()
+    seg = lc.row_id.map(pd.Series(sp.values, index=pol.row_id.values))
+    d = pd.DataFrame({"seg": seg, "capped": capped, "excess": (cost - capped).clip(lower=0)})[mature & seg.notna()]
+    r = d.excess.sum() / d.capped.sum()
+    t = d.groupby("seg").agg(n_claims=("capped", "size"), capped=("capped", "sum"), excess=("excess", "sum"))
+    t["raw_ratio"] = t.excess / t.capped
+    t["loading"] = 1 + (t.n_claims * t.raw_ratio + K * r) / (t.n_claims + K)
+    t = t.reset_index().rename(columns={"seg": "segment"})
+    m = t.set_index("segment").loading
+    return (sp.map(m).fillna(1 + r).values.astype(float), st.map(m).fillna(1 + r).values.astype(float), t)
+
+
 def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, line: str, cfg: dict) -> tuple[pd.DataFrame, dict]:
     """Add training label, evaluation label and weight to a line's training rows.
 
@@ -157,4 +188,6 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
     df["w"] = df.completeness.clip(lower=0.05) ** wp if wp else 1.0
     info = {"line": line, "cap": cap, "loading": loading, "trend": tf, "trend_method": method,
             "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
+    if cfg.get("loading") == "segment" and cap:
+        info["loading_rows"], info["loading_test"], info["loading_table"] = segment_loading(pol, test, lc, cost, capped, line)
     return df[["row_id", "y_train", "y_eval", "y_dev", "w", "completeness", "ibnr"]], info

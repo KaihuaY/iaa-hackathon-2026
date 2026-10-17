@@ -102,6 +102,24 @@ def test_claims_fall_inside_row_period(base):
 
 
 @pytest.mark.parametrize("line", LINES)
+def test_segment_loading(base, line):
+    cfg = {"develop": True, "cap_q": 0.99, "trend": "premium", "weight_power": 1.0}
+    pol, te = base[f"train_{line}"], base[f"test_{line}"]
+    _, plain = prepare_target(pol, te, base["claims"], line, cfg)
+    assert "loading_rows" not in plain
+    _, info = prepare_target(pol, te, base["claims"], line, {**cfg, "loading": "segment"})
+    assert len(info["loading_rows"]) == len(pol) and len(info["loading_test"]) == len(te)
+    assert (info["loading_rows"] >= 1).all() and (info["loading_test"] >= 1).all()
+    c = base["claims"]
+    c = c[(c.line == line) & c.row_id.notna()]
+    capped = c.net_incurred.clip(upper=info["cap"]).groupby(c.row_id).sum()
+    w = pol.row_id.map(capped).fillna(0.0).values
+    m = (pol.period_start.dt.year <= 2023).values
+    wm = np.average(info["loading_rows"][m], weights=w[m])
+    assert abs(wm / info["loading"] - 1) < 0.005
+
+
+@pytest.mark.parametrize("line", LINES)
 def test_target_development(base, line):
     cfg = {"develop": True, "cap_q": 0.995, "trend": "premium", "weight_power": 1.0}
     t, info = prepare_target(base[f"train_{line}"], base[f"test_{line}"], base["claims"], line, cfg)
