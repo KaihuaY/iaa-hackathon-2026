@@ -29,6 +29,39 @@ def _prior(rows: pd.DataFrame, key: str, prefix: str) -> pd.DataFrame:
     return pd.concat(out, axis=1).rename_axis([key, "year"]).reset_index()
 
 
+def _prior_cols(rows: pd.DataFrame, key: str, prefix: str, cols: list) -> pd.DataFrame:
+    """Sum of arbitrary per-row value columns for `key` over the LOOKBACK years before each row's year."""
+    agg = rows.groupby([key, "year"])[cols].sum().unstack("year")
+    agg = agg.reindex(columns=pd.MultiIndex.from_product([cols, YEARS]), fill_value=0).fillna(0)
+    out = []
+    for c in cols:
+        win = sum(agg[c].shift(k, axis=1).fillna(0) for k in range(1, LOOKBACK + 1))
+        out.append(win.stack().rename(f"hx_{prefix}_{c}"))
+    return pd.concat(out, axis=1).rename_axis([key, "year"]).reset_index()
+
+
+def rich_history(train_all: pd.DataFrame, test_all: pd.DataFrame, claims: pd.DataFrame) -> pd.DataFrame:
+    """Prior claim COST (capped at the line's 99th pct) and prior claim counts BY PERIL, for policy and customer.
+    Columns are prefixed hx_ and only used when a config sets features['rich_history']."""
+    c = claims.dropna(subset=["row_id"]).copy()
+    cap = c.groupby("line").net_incurred.transform(lambda s: s.quantile(0.99))
+    c["cost"] = c.net_incurred.clip(upper=cap)
+    per_row = c.pivot_table(index="row_id", columns="peril", values="claim_id", aggfunc="count", fill_value=0)
+    per_row.columns = [f"n_{p}" for p in per_row.columns]
+    per_row["cost"] = c.groupby("row_id").cost.sum()
+    vals = list(per_row.columns)
+    rows = pd.concat([train_all[["row_id", "line", "policy_id", "customer_id", "year"]],
+                      test_all[["row_id", "line", "policy_id", "customer_id", "year"]]], ignore_index=True)
+    rows = rows.merge(per_row, left_on="row_id", right_index=True, how="left")
+    rows[vals] = rows[vals].fillna(0)
+    feats = rows[["row_id", "policy_id", "customer_id", "year"]].copy()
+    feats = feats.merge(_prior_cols(rows, "policy_id", "pol", vals), on=["policy_id", "year"], how="left")
+    feats = feats.merge(_prior_cols(rows, "customer_id", "cust", vals), on=["customer_id", "year"], how="left")
+    hx = [x for x in feats.columns if x.startswith("hx_")]
+    feats[hx] = feats[hx].fillna(0).astype("float32")
+    return feats.drop(columns=["policy_id", "customer_id", "year"])
+
+
 def experience_features(train_all: pd.DataFrame, test_all: pd.DataFrame) -> pd.DataFrame:
     """Per (line,row) prior-claims features: same policy, same customer (own line and all lines)."""
     rows = pd.concat([train_all, test_all.assign(claim_count=np.nan)], ignore_index=True)
@@ -65,6 +98,7 @@ def build_base(refresh: bool = False) -> dict:
     test_all = pd.concat([te[l].assign(line=l) for l in LINES], ignore_index=True)
     exp = experience_features(train_all[["row_id", "line", "policy_id", "customer_id", "year", "exposure", "claim_count"]],
                               test_all[["row_id", "line", "policy_id", "customer_id", "year", "exposure"]])
+    exp = exp.merge(rich_history(train_all, test_all, D["claims"]), on="row_id", how="left")
     out = {}
     for l in LINES:
         for k, d in (("train", tr[l]), ("test", te[l])):
@@ -83,6 +117,8 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     drop = set(DROP)
     if not cfg.get("history", True):
         drop |= {c for c in train.columns if c.startswith(("pol_", "cust_")) or c == "lines_held"}
+    if not cfg.get("rich_history", False):
+        drop |= {c for c in train.columns if c.startswith("hx_")}
     if not cfg.get("premium", False):
         drop.add("written_premium")
     drop |= set(cfg.get("drop", []))

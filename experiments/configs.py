@@ -102,6 +102,10 @@ EXPERIMENTS = {
                         features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "X5_blend3": dict(desc="3-way blend: B15 (GLM+boost), L17 (tuned GBM), F17 (tuned freq x sev)",
                       proposer="AI", model="blend", parts=["B15_denoise_mm", "L17_tuned", "F17_freqsev"]),
+    "L18_richhist": dict(desc="L17 + prior claim cost and prior claims by peril (policy and customer, 2-yr window)",
+                         proposer="AI (new signal: richer experience rating)", model="lgbm", params=TUNED,
+                         target={**FULL_T, "cap_q": 0.99},
+                         features={**HIST_F, "rich_history": True, "drop": NOISE + ["make_model"]}),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})

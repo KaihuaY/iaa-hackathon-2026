@@ -71,6 +71,18 @@ def test_history_uses_only_prior_years(base):
     assert np.allclose(t.pol_claims.values, t.policy_id.map(prior).fillna(0).values)
 
 
+def test_rich_history_uses_only_prior_years(base):
+    tr = base["train_buildings"]
+    hx = [c for c in tr.columns if c.startswith("hx_")]
+    assert hx, "rich history columns missing"
+    assert (tr.loc[tr.year == 2021, hx] == 0).all().all(), "2021 rows cannot have history"
+    # policy prior claim counts by peril must equal the policy's claims in the previous 2 years
+    t = tr[tr.year == 2023]
+    prev = tr[tr.year.isin([2021, 2022])].groupby("policy_id").claim_count.sum()
+    n_cols = [c for c in hx if c.startswith("hx_pol_n_")]
+    assert np.allclose(t[n_cols].sum(axis=1).values, t.policy_id.map(prev).fillna(0).values)
+
+
 def test_history_window_is_stable_across_years(base):
     """History features must mean the same thing in every year (bounded look-back), incl. the 2025 test set."""
     from features import LOOKBACK
