@@ -7,6 +7,10 @@ FULL_T = {**DEV_CAP, "trend": "premium", "weight_power": 1.0}
 
 NOISE = ["previous_insurer", "branch_id", "email_domain", "campaign_code"]
 TUNED = {"min_data_in_leaf": 8000, "feature_fraction": 0.5}   # quick-screen winner after de-noising (17 Oct)
+# Directions any pricing actuary would expect (+1 = cost rises with the feature); missing features are ignored.
+MONOTONE = {"voluntary_excess": -1, "ncb_years": -1, "prior_claims_5y": 1, "licence_points": 1, "pol_claims": 1,
+            "cust_claims": 1, "missed_payments_12m": 1, "vehicle_value_group": 1, "annual_mileage": 1,
+            "sum_insured": 1, "flood_zone": 1, "high_value_items": 1}
 # Features with no plausible link to the line's perils and/or unstable year to year (17 Oct screen)
 IRRELEVANT = {
     "motor": ["roof_type", "soil_type", "energy_rating", "basement", "trees_within_5m", "listed_building", "solar_panels",
@@ -118,6 +122,17 @@ EXPERIMENTS = {
                     parts=["F17_freqsev", "F17_s101", "F17_s202"]),
     "X6_blend3bag": dict(desc="3-way blend: B15 + seed-bagged L17 + seed-bagged F17", proposer="AI (seed bagging)",
                          model="blend", parts=["B15_denoise_mm", "L17_bag", "F17_bag"]),
+    # ---- branch advanced-ml ----
+    "A1_catboost": dict(desc="CatBoost Tweedie (ordered target stats for categoricals), L17 features/target",
+                        proposer="AI (advanced ML)", model="catboost", target={**FULL_T, "cap_q": 0.99},
+                        features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "A2_xgb": dict(desc="XGBoost Tweedie (hist, native categoricals), L17 features/target", proposer="AI (advanced ML)",
+                   model="xgb", target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "A3_mono": dict(desc="L17 with actuarial monotone constraints (excess -, NCB -, prior claims +, sum insured + ...)",
+                    proposer="AI (advanced ML; trust criterion)", model="lgbm", params={**TUNED, "monotone": MONOTONE},
+                    target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "S1_stack": dict(desc="Stacking meta-learner (Tweedie GLM on log predictions) over B15, L17_bag, F17_bag",
+                     proposer="AI (advanced ML)", model="blend", stack=True, parts=["B15_denoise_mm", "L17_bag", "F17_bag"]),
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
