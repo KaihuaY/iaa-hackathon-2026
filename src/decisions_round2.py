@@ -39,14 +39,15 @@ DECISIONS = [
     },
     {
         "id": "submit_now", "impact": "High", "multi": False,
-        "title": "Submit X4 (3-way de-noised blend)? Predicted LB 0.1269 vs best 0.1249 (+1.6 %)",
-        "why": "X4 = GLM+boost + Tweedie GBM + frequency x severity GBM, noise features removed. Nested CV 0.1577 vs X1 0.1552. "
+        "title": "Submit X5 (3-way de-noised, tuned blend)? Predicted LB 0.1275 vs best 0.1249 (+2.1 %)",
+        "why": "X5 = GLM+boost + tuned Tweedie GBM + tuned frequency x severity GBM, noise features removed. Nested CV 0.1584 vs X1 0.1552; "
+               "first candidate whose predicted gain (+0.0026) clears the noise band (+-0.0022). "
                "Below the 5 % auto-submit bar (needs predicted 0.1311). You held X3 (+1.5 %) earlier to keep stacking.",
         "options": [
-            {"key": "A", "label": "Yes, submit X4 (1 submission)",
+            {"key": "A", "label": "Yes, submit X5 (1 submission)",
              "pros": "Gain is consistent across lines and on the 2023 holdout, with a clear mechanism (noise features removed); "
                      "removing noise should also help on the private leaderboard.",
-             "cons": "Predicted gain (+0.0018) sits just under the ±0.002 noise band.", "rec": True},
+             "cons": "Below the 5 % auto-submit bar; gain is modest in absolute terms.", "rec": True},
             {"key": "B", "label": "Wait and stack more improvements first", "pros": "One bigger, clearer jump later.",
              "cons": "No LB confirmation that the de-noising transfers."},
         ],
