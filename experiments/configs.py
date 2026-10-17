@@ -100,7 +100,9 @@ EXPERIMENTS = {
                     "minleaf40k": {"min_data_in_leaf": 40000},
                     "minleaf8k": {"min_data_in_leaf": 8000},
                     "ff05": {"feature_fraction": 0.5},
-                    "l2_200": {"lambda_l2": 200.0}}.items()},
+                    "l2_200": {"lambda_l2": 200.0},
+                    "combo": {"min_data_in_leaf": 8000, "feature_fraction": 0.5},
+                    "combo31": {"min_data_in_leaf": 8000, "feature_fraction": 0.5, "num_leaves": 31}}.items()},
     # Day 2 GLM variants (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
