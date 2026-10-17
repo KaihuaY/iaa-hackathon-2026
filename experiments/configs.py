@@ -38,6 +38,8 @@ EXPERIMENTS = {
                      model="glmboost", target=FULL_T, features=HIST_F),
     "L6_lgbm": dict(desc="Standalone regularised Tweedie GBM, G6 target/features (challenger)", proposer="user (#1)",
                     model="lgbm", target=FULL_T, features=HIST_F),
+    "X1_blend": dict(desc="Per-line blend of B6 (GLM+boost) and L6 (standalone GBM), weights on CV",
+                     proposer="user (decision board #9) + AI (per-line evidence)", model="blend", parts=["B6_boost", "L6_lgbm"]),
     # Day 2 candidates (each a single change vs G6, LB 0.11716)
     "G7_nan": dict(desc="G6 + history unknown (not zero) for 2021 rows", proposer="AI (from G5 diagnosis)",
                    model="glm", target=FULL_T, features={**HIST_F, "hist_nan_2021": True}),
