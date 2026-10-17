@@ -136,6 +136,12 @@ EXPERIMENTS = {
                          model="blend", parts=["B15_denoise_mm", "L20_mono_lowreg", "F17_bag"]),
     "X10_blend4": dict(desc="4-way blend: B15, L20 corrected, F17_bag, A1 CatBoost (cached predictions from branch advanced-ml)",
                        proposer="AI", model="blend", step=0.1, parts=["B15_denoise_mm", "L20_mono_lowreg_cred", "F17_bag", "A1_catboost"]),
+    # Tweedie training power (metric stays p=1.5; the best training objective may differ by line)
+    **{f"P20_{str(pw).replace('.', '')}": dict(desc=f"L20 with Tweedie training power {pw}", proposer="AI (plan: training power)",
+                                               model="lgbm", params={**TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE,
+                                                                     "tweedie_variance_power": pw},
+                                               target={**FULL_T, "cap_q": 0.99, "loading": "segment"},
+                                               features={**HIST_F, "drop": NOISE + ["make_model"]}) for pw in (1.2, 1.35, 1.65, 1.8)},
     # Quick-screen tuning grid around L15 (de-noised features changed the trade-offs)
     **{f"T15_{k}": dict(desc=f"L15 tuning: {k}", proposer="AI (quick-screen tuning)", model="lgbm",
                         params=p, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
