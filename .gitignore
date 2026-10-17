@@ -10,3 +10,4 @@ reports/*.html
 submissions/
 experiments/*.pkl
 experiments/cache/
+experiments/optuna.db
