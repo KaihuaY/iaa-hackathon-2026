@@ -442,3 +442,15 @@ EXPERIMENTS.update({
     "X27_blend6_wp": dict(desc="X21 parts plus the written-premium model as a blend part", proposer="AI (round 6)", model="blend", step=0.1,
                           parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P29_wp"]),
 })
+
+# Brainstorm B3/B4 (user-selected 19 Oct): low-learning-rate part and an unconstrained diversity part on the X21 parts
+EXPERIMENTS.update({
+    "P30_lowlr": dict(desc="P20_135 at learning rate 0.01 (early stopping sets the rounds)", proposer="AI (B3)", model="lgbm",
+                      params={**_P135, "learning_rate": 0.01}, target=_T135, features=_F135),
+    "P31_free": dict(desc="P20_135 without monotone constraints (diversity part only; constrained parts stay in the core)", proposer="AI (B4)",
+                     model="lgbm", params={k: v for k, v in _P135.items() if k != "monotone"}, target=_T135, features=_F135),
+    "X28_blend5_lowlr": dict(desc="X21 parts plus P30 low-lr LightGBM", proposer="AI (B3)", model="blend", step=0.1,
+                             parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P30_lowlr"]),
+    "X29_blend5_free": dict(desc="X21 parts plus P31 unconstrained LightGBM", proposer="AI (B4)", model="blend", step=0.1,
+                            parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P31_free"]),
+})
