@@ -51,3 +51,21 @@ mostly policy-level noise). Kept as a marginal blend member.
 Lesson for the write-up: nested CV is necessary but not sufficient; a forward holdout and a test-distribution sanity check
 are the guardrails that catch extrapolation, and they must be automatic because a blend would otherwise hide a broken part
 behind a small weight on one line.
+
+## 2026-10-18 · Review 4: the smooth GLM still failed the 2023 holdout after the extrapolation fix — root cause
+
+After Review 3's fix the smooth GLM (G14) and smooth-boost (B19) scored sane 5-fold CVs (0.1562 / 0.1570), sane test
+means (test/OOF 0.93–1.04) and sane test tails (max/median comparable with CatBoost), yet the buildings 2023 holdout was
+still −0.59. A targeted diagnostic (script written by a smaller model to a spec; findings verified against the feature
+ranges in the real training and test sets) found:
+
+| # | Finding | Evidence | Decision |
+|---|---|---|---|
+| 1 | Not an outlier problem: the 20 worst rows carry 8 % of the deviance; removing rows with pred > 50× median makes the holdout *worse* (−0.61) | deviance decomposition on the reproduced holdout (−0.587) | Clipping/winsorising cannot fix it |
+| 2 | The cumulative-exposure history counters (`cust_expo`, `pol_expo`, `cust_{motor,buildings,contents}_expo`) are calendar-time proxies: mean 0.00 (2021), 1.67 (2022), 2.99 (2023), 2.95 (2024). Trained on ≤2022 only, every 2023 row sits in a region of the quadratic terms the fit never saw; the five largest GLM coefficients are their linear/squared terms (±1.1 to ±3.8, offsetting each other) | 55–69 % of 2023 rows outside the ≤2022 range; dropping the five counters moves the holdout from −0.587 to **+0.108** (≈ the 5-fold CV of 0.111) | Smooth GLM family drops the counters (`EXPO_COUNTERS`); trees keep them (they map out-of-range values to the last leaf; tree holdouts are +0.06–0.07) |
+| 3 | The 2025 test set is **in range**: 0 % of test rows above the training max on any history feature; test mean `cust_expo` 2.95 = the 2023–24 level, which is half the training rows. So the test predictions of G14/B19 were not actually extrapolating — the failure is specific to the ≤2022-only fit | feature-range check on the full training vs test matrices | A part must still pass the time-shift test to be in the final blend: B19 is replaced by B20 (no counters), G14 had zero blend weight and is dropped |
+| 4 | Bands-mode GLM on the same holdout: +0.085 — quantile banding is inherently shift-robust, which is why the original GLM base never showed the problem | — | Documented as a design trade-off: smooth terms gain CV (0.1562 vs 0.1522) but need shift-safe inputs |
+
+Lesson: random K-fold CV cannot see a feature that drifts with calendar time; only the forward holdout can. Any feature
+built from cumulative history must be either windowed and saturating (as the 2-year window is from 2023 on) or excluded
+from models with unbounded functional forms.

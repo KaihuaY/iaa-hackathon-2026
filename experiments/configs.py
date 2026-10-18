@@ -15,6 +15,9 @@ from market_spec import get_spec  # noqa: E402
 
 _S = get_spec()
 NOISE = list(_S.noise_features)
+# cumulative-exposure history counters: calendar-time proxies (0 in 2021, ~1.7 in 2022, ~3 from 2023); unsafe in the
+# smooth GLM's quadratic terms under a time shift (review 4), harmless in trees
+EXPO_COUNTERS = ["cust_expo", "pol_expo", "cust_motor_expo", "cust_buildings_expo", "cust_contents_expo"]
 TUNED = dict(_S.tuned)               # quick-screen winner after de-noising (17 Oct)
 # Features with no plausible link to the line's perils and/or unstable year to year (17 Oct screen)
 IRRELEVANT = {k: list(v) for k, v in _S.irrelevant.items()}
@@ -225,13 +228,23 @@ EXPERIMENTS = {
                                   target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"]}),
     "X15_blend5_smooth": dict(desc="5-way blend: P20_135_bag_cred, F18_bag, A1 CatBoost, B19 smooth-boost, G14 smooth GLM", proposer="AI (non-linear hunt)",
                               model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B19_smoothboost_tuned", "G14_glm_smooth_eng"]),
+    # Review 4 (18 Oct): the cumulative-exposure counters are calendar-time proxies (0 in 2021, ~1.7 in 2022, ~3 from 2023);
+    # the smooth GLM's quadratic terms extrapolate them badly in the <=2022 -> 2023 holdout (-0.59). Test 2025 is in range,
+    # but a part must pass the time-shift test, so the smooth family drops them (trees in the other parts keep them).
+    "B20_smoothboost_noexpo": dict(desc="B19 without the cumulative-exposure counters (time-shift robust smooth GLM base)",
+                                   proposer="AI (review 4: holdout diagnosis)", model="glmboost",
+                                   params={"glm": {"mode": "smooth", "alpha": 1e-4, "interactions": [("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age")]},
+                                           **TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35},
+                                   target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+    "X16_blend4_noexpo": dict(desc="4-way blend: P20_135_bag_cred, F18_bag, A1 CatBoost, B20 smooth-boost (time-shift robust)", proposer="AI (non-linear hunt)",
+                              model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo"]),
     "G15_glm_peril": dict(desc="G14 smooth GLM plus physical peril interactions (soil x dry summer, flood x rainfall, wind x roof, freezing x property age, hail x parking, flood x basement)",
                           proposer="AI (non-linear hunt: GLM lacks peril interactions on buildings)", model="glm",
                           params={"mode": "smooth", "alpha": 1e-4, "interactions": [
                               ("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age"),
                               ("dry_summer_index","soil_type"),("rainfall_mm","flood_zone"),("wind_exposure_index","roof_type"),("freezing_days","property_age"),
                               ("hail_days","overnight_parking"),("rainfall_mm","basement"),("wind_exposure_index","trees_within_5m"),("elevation_m","flood_zone")]},
-                          target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"]}),
+                          target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
     "D1_dart": dict(desc="P20_135 with DART boosting (drop 0.1, skip 0.5); early stopping is not available in dart",
                     proposer="AI (local loop, backlog #7)", model="lgbm",
                     params={**_P135, "boosting": "dart", "drop_rate": 0.1, "skip_drop": 0.5}, target=_T135, features=_F135),
