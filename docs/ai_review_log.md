@@ -41,3 +41,13 @@ that nothing can be submitted without explicit approval or the 5 % rule.
 
 Outcome: correction layer worth +0.0001 nested (in-sample scan had suggested up to +0.006; the rare-segment deviations are
 mostly policy-level noise). Kept as a marginal blend member.
+
+## 2026-10-18 · Review 3: smooth log-GLM extrapolation caught by the holdout and test-mean checks
+
+| # | Finding | Severity | How caught | Fix |
+|---|---|---|---|---|
+| 1 | The new smooth GLM (log1p + squared terms + interactions, written by a smaller model to spec) scored a normal 5-fold CV (buildings 0.1117) but a 2023 time-holdout D² of −0.66 and a 2025 test-prediction mean of 24,016 vs ~400: quadratic log terms and products extrapolate explosively outside the fit range | Bug (would have corrupted any blend containing it) | Not by CV (out-of-fold rows are interpolation). By the 2023 holdout printed alongside every run and by the per-line test-mean print | Winsorise inputs to the fit range, clip standardised terms, bound the linear predictor; plus a new pipeline guard: any model whose test pure premium per exposure is outside 0.5–2× its OOF value is marked unsafe, cannot be blended, cannot be written to a submission |
+
+Lesson for the write-up: nested CV is necessary but not sufficient; a forward holdout and a test-distribution sanity check
+are the guardrails that catch extrapolation, and they must be automatic because a blend would otherwise hide a broken part
+behind a small weight on one line.
