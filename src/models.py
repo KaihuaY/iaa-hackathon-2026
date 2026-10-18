@@ -66,10 +66,11 @@ class LGBMTweedie:
 class GLMTweedie:
     """Tweedie GLM (glum) on banded numerics and grouped categoricals, log(exposure) offset."""
 
-    def __init__(self, alpha=1e-4, n_bins=10, top=30, mode="bands", interactions=None):
+    def __init__(self, alpha=1e-4, n_bins=10, top=30, mode="bands", interactions=None, power=1.5):
         assert mode in ("bands", "smooth"), mode
         self.alpha, self.n_bins, self.top = alpha, n_bins, top
         self.mode = mode
+        self.power = float(power)      # Tweedie variance power (1.0 = Poisson, for claim counts)
         self.interactions = [tuple(p) for p in (interactions or [])]
 
     def _cat_col(self, s, keep):
@@ -169,7 +170,7 @@ class GLMTweedie:
         Z = self._design(X, fit=True)
         self.cols = Z.columns
         M = self._matrix(Z)
-        self.model = GeneralizedLinearRegressor(family=TweedieDistribution(1.5), link="log", alpha=self.alpha,
+        self.model = GeneralizedLinearRegressor(family=TweedieDistribution(self.power), link="log", alpha=self.alpha,
                                                 l1_ratio=0.0, max_iter=200)
         self.model.fit(M, y, sample_weight=w, offset=np.log(expo))
         eta = M @ np.asarray(self.model.coef_) + float(self.model.intercept_)
@@ -199,11 +200,19 @@ class FreqSev:
         self.sev_params = {**LGBM_DEFAULT, "objective": "gamma", "min_data_in_leaf": 2000, "num_leaves": 15, **sev}
         self.sev_params.pop("tweedie_variance_power", None)
         self.sev_iter = None
+        fb = params.pop("freq_base", None)       # optional smooth-GLM base for the frequency stage (Poisson)
+        self.freq_glm = GLMTweedie(**{"power": 1.0, **fb}) if fb is not None else None
 
     def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None,
             counts=None, counts_val=None):
         assert counts is not None, "FreqSev needs claim counts"
-        self.freq.fit(X, counts, w, expo, X_val, counts_val, w_val, expo_val, n_iter=n_iter)
+        m = mv = None
+        if self.freq_glm is not None:     # counts with log(expo) offset, same convention as the GBM
+            self.freq_glm.fit(X, counts, w, expo)
+            m = np.log(self.freq_glm.predict(X, expo))
+            if X_val is not None and n_iter is None:
+                mv = np.log(self.freq_glm.predict(X_val, expo_val))
+        self.freq.fit(X, counts, w, expo, X_val, counts_val, w_val, expo_val, n_iter=n_iter, margin=m, margin_val=mv)
         self.best_iter = self.freq.best_iter
         has = (counts > 0) & (y > 0)          # gamma needs strictly positive severities (review fix)
         sev = y[has] / counts[has]
@@ -230,7 +239,8 @@ class FreqSev:
         return self
 
     def predict(self, X, expo):
-        f = self.freq.predict(X, expo)                       # expected claim count for the row
+        mg = np.log(self.freq_glm.predict(X, expo)) if self.freq_glm is not None else None
+        f = self.freq.predict(X, expo, margin=mg)            # expected claim count for the row
         s = np.exp(self.sev.predict(X, raw_score=True, num_iteration=self.sev_rounds) + self.sev_base)
         return self.scale * f * s
 
