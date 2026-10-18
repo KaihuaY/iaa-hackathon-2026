@@ -54,6 +54,26 @@ def test_predict_same_columns_unseen_level():
     assert list(m._design(Xn, fit=False)[cols].columns) == cols
 
 
+def test_smooth_bounded_extrapolation():
+    rng = np.random.default_rng(5)
+    n = 20_000
+    x = np.exp(rng.uniform(0, np.log(100), n))                      # x in [1, 100]
+    X = pd.DataFrame({"x": x, "z": rng.normal(size=n), "k": pd.Categorical(rng.choice(["p", "q"], n))})
+    e = rng.uniform(0.5, 1.0, n)
+    y = rng.poisson(e * 0.2 * x ** 0.5) * 100.0
+    m = GLMTweedie(mode="smooth", interactions=[("x", "z"), ("x", "k")]).fit(X, y, e, e)
+
+    def pred(v):
+        Xp = X.iloc[:200].copy()
+        Xp["x"] = v
+        return m.predict(Xp, np.ones(200))
+
+    assert np.isfinite(pred(1e4)).all() and np.isfinite(pred(0.01)).all()
+    hi, lo = pred(1e4) / pred(100.0), pred(0.01) / pred(1.0)
+    assert ((hi >= 0.2) & (hi <= 5)).all(), (hi.min(), hi.max())
+    assert ((lo >= 0.2) & (lo <= 5)).all(), (lo.min(), lo.max())
+
+
 def _frame(n=30, seed=2):
     rng = np.random.default_rng(seed)
     d = pd.DataFrame({

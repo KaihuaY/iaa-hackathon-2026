@@ -77,6 +77,10 @@ def quick(name: str, cfg: dict, seed: int | None = None) -> dict:
     return out
 
 
+holdout_floor = 0.0
+RATIO_LO, RATIO_HI = 0.5, 2.0
+
+
 def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, verbose: bool = True) -> dict:
     """Returns dict with per-line OOF/test predictions and scores; caches to experiments/results/<name>.pkl."""
     if cfg["model"] == "blend":
@@ -112,12 +116,22 @@ def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, ve
         res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
                               "test_row_id": te.row_id.values, "test_pred": pt * pt_load, "cv": cv, "holdout": ho, "calibration": calib,
                               "info": info, "iters": iters, "importance": imp}
+        ratio = float((np.mean(pt * pt_load / te.exposure.values)) / np.mean(oof / e))
+        res["lines"][line]["test_sanity"] = ratio
+        if not (RATIO_LO <= ratio <= RATIO_HI):
+            print(f"WARNING: {line} test predictions implausible (ratio {ratio:.2f}) - result marked unsafe", flush=True)
+            res["lines"][line]["unsafe"] = True
+            res["unsafe"] = True
+        if ho < holdout_floor:
+            print(f"WARNING: negative holdout on {line}", flush=True)
         if verbose:
             print(f"  {line:9s} CV D2 {cv:.4f} | {spec.holdout_year} holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
-                  f"| test mean {np.mean(pt * pt_load):,.1f}", flush=True)
+                  f"| test mean {np.mean(pt * pt_load):,.1f} | test/oof {ratio:.2f}", flush=True)
     _summarise(res)
     res["minutes"] = (time.time() - t0) / 60
     _save(res)
+    if res.get("unsafe"):
+        print("UNSAFE RESULT", flush=True)
     return res
 
 
@@ -168,6 +182,12 @@ def run_blend(name: str, cfg: dict, folds: int | None = None) -> dict:
         grid = [np.full(len(parts), 1 / len(parts))]
     else:
         grid = _simplex(len(parts), cfg.get("step", 0.05 if len(parts) <= 3 else 0.1))
+    for pname, part in zip(cfg["parts"], parts):    # a blend must never include an exploding part
+        for line in spec.lines:
+            pl = part["lines"][line]
+            r = float(np.mean(pl["test_pred"]) / np.mean(pl["oof"]))
+            if pl.get("unsafe") or not (RATIO_LO <= r <= RATIO_HI):
+                raise ValueError(f"part {pname} unsafe on {line}: ratio {r:.2f}")
     res = {"name": name, "cfg": cfg, "lines": {}}
     nested_y, nested_p = [], []
     for line in spec.lines:
@@ -226,5 +246,7 @@ def load(name: str) -> dict:
 
 
 def test_predictions(res: dict) -> pd.DataFrame:
+    if res.get("unsafe"):
+        raise ValueError("unsafe result; refusing to write a submission")
     return pd.concat([pd.DataFrame({"row_id": l["test_row_id"], "prediction": l["test_pred"]}) for l in res["lines"].values()],
                      ignore_index=True)

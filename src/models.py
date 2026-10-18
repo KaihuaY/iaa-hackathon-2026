@@ -104,7 +104,9 @@ class GLMTweedie:
 
     def _design_smooth(self, X, fit):
         """Per numeric: standardised log1p(x-min) and its square (+ missing indicator, mean-filled); categoricals as
-        in bands mode; interactions: num x num = product of log1p terms, num x cat = log1p term x each one-hot level."""
+        in bands mode; interactions: num x num = product of log1p terms, num x cat = log1p term x each one-hot level.
+        Raw values are winsorised to the fit 0.5/99.5 percentiles and every standardised term is clipped to [-4, 4],
+        so the design (interactions included) is bounded outside the fit range."""
         if fit:
             self.spec, self.stats = {}, {}
         out, raw = {}, {}
@@ -114,7 +116,7 @@ class GLMTweedie:
                 mu, sd = float(np.mean(v)), float(np.std(v))
                 self.stats[key] = (mu, sd if sd > 1e-12 else 1.0)
             mu, sd = self.stats[key]
-            out[name] = ((v - mu) / sd).astype("float64")
+            out[name] = np.clip((v - mu) / sd, -4.0, 4.0).astype("float64")
 
         for c in X.columns:
             s = X[c]
@@ -126,14 +128,18 @@ class GLMTweedie:
                 x = s.astype(float).to_numpy()
                 nan = np.isnan(x)
                 if fit:
-                    mn = float(np.nanmin(x)) if (~nan).any() else 0.0
-                    fill = float(np.mean(np.log1p(np.clip(x[~nan] - mn, 0, None)))) if (~nan).any() else 0.0
-                    self.spec[c] = ("num", mn, bool(nan.any()), fill)
-                _, mn, has_nan, fill = self.spec[c]
-                t = np.where(nan, fill, np.log1p(np.clip(np.where(nan, mn, x) - mn, 0, None)))
-                raw[c] = t
+                    if (~nan).any():
+                        lo, hi = (float(q) for q in np.percentile(x[~nan], [0.5, 99.5]))
+                        mn = lo
+                        fill = float(np.mean(np.log1p(np.clip(x[~nan], lo, hi) - mn)))
+                    else:
+                        lo = hi = mn = fill = 0.0
+                    self.spec[c] = ("num", mn, bool(nan.any()), fill, lo, hi)
+                _, mn, has_nan, fill, lo, hi = self.spec[c]
+                t = np.where(nan, fill, np.log1p(np.clip(np.where(nan, mn, x), lo, hi) - mn))
                 std(f"{c}__l", t, f"{c}__l")
                 std(f"{c}__l2", t ** 2, f"{c}__l2")
+                raw[c] = out[f"{c}__l"]      # clipped, standardised component for interactions
                 if has_nan:
                     out[f"{c}__na"] = nan.astype("float64")
         for a, b in self.interactions:
@@ -147,13 +153,27 @@ class GLMTweedie:
                     std(f"{a}*{b}={lvl}", raw[a] * (lab == lvl), f"{a}*{b}={lvl}")
         return pd.DataFrame(out, index=X.index)
 
+    def _matrix(self, Z):
+        """Numeric matrix with categoricals one-hot encoded (first level dropped), identical for fit and predict."""
+        parts = []
+        for c in self.cols:
+            if isinstance(Z[c].dtype, pd.CategoricalDtype):
+                for lvl in Z[c].cat.categories[1:]:
+                    parts.append((Z[c] == lvl).to_numpy(dtype="float64"))
+            else:
+                parts.append(Z[c].to_numpy(dtype="float64"))
+        return np.column_stack(parts)
+
     def fit(self, X, y, w, expo, **_):
         from glum import GeneralizedLinearRegressor, TweedieDistribution
         Z = self._design(X, fit=True)
         self.cols = Z.columns
+        M = self._matrix(Z)
         self.model = GeneralizedLinearRegressor(family=TweedieDistribution(1.5), link="log", alpha=self.alpha,
-                                                l1_ratio=0.0, drop_first=True, max_iter=200)
-        self.model.fit(Z, y, sample_weight=w, offset=np.log(expo))
+                                                l1_ratio=0.0, max_iter=200)
+        self.model.fit(M, y, sample_weight=w, offset=np.log(expo))
+        eta = M @ np.asarray(self.model.coef_) + float(self.model.intercept_)
+        self.eta_range = (float(eta.min()), float(eta.max()))
         return self
 
     def predict(self, X, expo):
@@ -161,7 +181,10 @@ class GLMTweedie:
         assert set(self.cols) <= set(Z.columns), "predict design is missing fit columns"
         Z = Z[self.cols]
         assert list(Z.columns) == list(self.cols)
-        return self.model.predict(Z, offset=np.log(expo))
+        eta = self._matrix(Z) @ np.asarray(self.model.coef_) + float(self.model.intercept_)
+        if self.mode == "smooth":
+            eta = np.clip(eta, self.eta_range[0] - 1.0, self.eta_range[1] + 1.0)
+        return np.exp(eta + np.log(expo))
 
 
 class FreqSev:

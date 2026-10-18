@@ -89,3 +89,53 @@ def test_lb_watch_parser_and_margin():
     assert s2["our_rank"] == 2 and np.isclose(s2["margin_to_next"], 0.12753 - 0.12815) and lb_watch.alert(s2)
     s3 = lb_watch.summarise([{**rows[0], "score": 0.12760}, rows[1]])
     assert lb_watch.alert(s3)                                       # margin 0.00007 < 0.0003
+
+
+def _fake_part(scale):
+    n, m = 6, 4
+    oof = np.full(n, 10.0)
+    return {"cfg": {"model": "lgbm"}, "lines": {"motor": {
+        "row_id": np.arange(n), "y_eval": np.array([0, 5, 0, 20, 0, 15.0]), "oof": oof,
+        "test_row_id": np.arange(m), "test_pred": np.full(m, 10.0 * scale), "holdout": np.nan}}}
+
+
+def _patch_blend(monkeypatch, parts):
+    import pipeline
+
+    class Spec:
+        lines = ["motor"]
+        n_folds = 2
+        group_col = "policy_id"
+        cache_path = Path("unused")
+        results_path = Path("unused")
+
+    monkeypatch.setattr(pipeline, "get_spec", lambda: Spec)
+    monkeypatch.setattr(pipeline, "load", lambda n: parts[n])
+    monkeypatch.setattr(pipeline, "_save", lambda r: None)
+    monkeypatch.setattr(pipeline.pd, "read_parquet",
+                        lambda *a, **k: pd.DataFrame({"row_id": np.arange(6), "policy_id": [0, 0, 1, 1, 2, 2]}))
+
+
+def test_run_blend_rejects_exploding_part(monkeypatch):
+    import pipeline
+    import pytest
+    _patch_blend(monkeypatch, {"good": _fake_part(1.0), "bad": _fake_part(60.0)})
+    with pytest.raises(ValueError, match="part bad unsafe on motor"):
+        pipeline.run_blend("b", {"model": "blend", "parts": ["good", "bad"]})
+
+
+def test_run_blend_accepts_normal_parts(monkeypatch):
+    import pipeline
+    _patch_blend(monkeypatch, {"a": _fake_part(1.0), "b": _fake_part(1.2)})
+    res = pipeline.run_blend("b", {"model": "blend", "parts": ["a", "b"], "step": 0.5})
+    assert "motor" in res["lines"] and not res.get("unsafe")
+
+
+def test_test_predictions_refuses_unsafe():
+    import pipeline
+    import pytest
+    res = {"unsafe": True, "lines": {"motor": {"test_row_id": np.arange(2), "test_pred": np.ones(2)}}}
+    with pytest.raises(ValueError, match="unsafe result"):
+        pipeline.test_predictions(res)
+    del res["unsafe"]
+    assert len(pipeline.test_predictions(res)) == 2
