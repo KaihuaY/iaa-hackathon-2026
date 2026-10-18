@@ -23,11 +23,12 @@ def __getattr__(name):
 
 def _line_data(base, line, cfg):
     tr, te = base[f"train_{line}"], base[f"test_{line}"]
-    tgt, info = prepare_target(tr, te, base["claims"], line, cfg.get("target", {}))
+    tcfg = {**cfg.get("target", {}), **cfg.get("target_by_line", {}).get(line, {})}   # per-line target overrides (e.g. cap_q)
+    tgt, info = prepare_target(tr, te, base["claims"], line, tcfg)
     fcfg = dict(cfg.get("features", {}))
     fcfg["drop"] = list(fcfg.get("drop", [])) + list(fcfg.get("drop_line", {}).get(line, []))
     X, Xt, cats = model_matrix(tr, te, fcfg)
-    apply_model_loading(tgt, info, X, Xt, tr, te, cfg.get("target", {}))   # no-op unless target.loading == "model"
+    apply_model_loading(tgt, info, X, Xt, tr, te, tcfg)   # no-op unless target.loading == "model"
     return tr, te, tgt, info, X, Xt
 
 

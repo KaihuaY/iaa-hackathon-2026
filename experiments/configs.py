@@ -415,3 +415,9 @@ EXPERIMENTS.update({
                                    "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600}},
                            target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
 })
+
+# Round 6: cap 0.985 helped motor (+0.0006 quick) and hurt buildings -> per-line cap via target_by_line
+EXPERIMENTS.update({
+    "P28_capline": dict(desc="P20_135 with per-line cap: motor 98.5th pct, buildings/contents 99th", proposer="AI (round 6)", model="lgbm",
+                        params=_P135, target=_T135, target_by_line={"motor": {"cap_q": 0.985}}, features=_F135),
+})
