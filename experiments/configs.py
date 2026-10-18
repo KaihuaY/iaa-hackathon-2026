@@ -354,3 +354,11 @@ EXPERIMENTS.update({
     "X19_blend5_nn": dict(desc="X16 plus the neural residual part", proposer="AI (novel techniques track)",
                           model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo", "N1_nnboost"]),
 })
+
+# ---- Track D2 (18 Oct): covariate-shift importance weights (train-vs-predicted-rows classifier); gate = 2023 forward holdout ----
+EXPERIMENTS.update({
+    "P24_shift": dict(desc="P20_135 with covariate-shift density-ratio weights, clip 0.2-5", proposer="AI (novel techniques track, D2)",
+                      model="lgbm", params=_P135, target={**_T135, "shift_weights": {"clip": [0.2, 5.0]}}, features=_F135),
+    "P24_shift_tight": dict(desc="P20_135 with covariate-shift density-ratio weights, clip 0.5-2", proposer="AI (novel techniques track, D2)",
+                            model="lgbm", params=_P135, target={**_T135, "shift_weights": {"clip": [0.5, 2.0]}}, features=_F135),
+})

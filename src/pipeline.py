@@ -40,6 +40,10 @@ def _aux(cfg, base, line, tr, tgt, info):
 
 
 def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None, cv_=None, line=None):
+    sw = cfg.get("target", {}).get("shift_weights")
+    if sw:                                       # covariate-shift weights vs the rows this fit predicts (Xv)
+        from shift import density_ratio_weights
+        w = np.asarray(w) * density_ratio_weights(X, Xv, clip=tuple(sw.get("clip", (0.2, 5.0))))[0]
     params = cfg.get("params")
     if line is not None and cfg.get("params_by_line", {}).get(line):
         params = {**(params or {}), **cfg["params_by_line"][line]}
