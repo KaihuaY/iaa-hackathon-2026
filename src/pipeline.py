@@ -57,6 +57,91 @@ def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None,
     return m, m.predict(Xv, ev)
 
 
+def _concat_frames(Xs, Xts, lines):
+    """Stack per-line design matrices (train and test share categorical levels) and add the categorical `line_id`."""
+    from pandas.api.types import union_categoricals
+    cols = [c for c in Xs[0].columns if all(c in f.columns for f in Xs[1:] + Xts)]
+    allf = [f[cols] for f in Xs + Xts]
+    out = {}
+    for c in cols:
+        ser = [f[c] for f in allf]
+        if all(isinstance(x.dtype, pd.CategoricalDtype) for x in ser):
+            u = union_categoricals([x.array for x in ser], sort_categories=True)
+            out[c] = pd.Series(u, dtype=u.dtype)
+        else:
+            out[c] = pd.concat(ser, ignore_index=True)
+    big = pd.DataFrame(out)
+    nt = sum(len(f) for f in Xs)
+    ids = np.concatenate([np.full(len(f), k) for k, f in enumerate(Xs)] + [np.full(len(f), k) for k, f in enumerate(Xts)])
+    big["line_id"] = pd.Categorical.from_codes(ids, categories=list(lines))
+    return big.iloc[:nt].reset_index(drop=True), big.iloc[nt:].reset_index(drop=True)
+
+
+def _units(cfg, spec):
+    """Groups of lines fitted together: one unit per line, except lines named in cfg['pool'] (one shared unit)."""
+    pool = cfg.get("pool")
+    if not pool:
+        return [[l] for l in spec.lines]
+    pooled = [l for l in pool if l in spec.lines]
+    for l in pool:
+        if l not in spec.lines:
+            print(f"  pool: line {l!r} not in spec.lines - ignored", flush=True)
+    if len(pooled) < 2:
+        return [[l] for l in spec.lines]
+    out, done = [], False
+    for l in spec.lines:
+        if l in pooled:
+            if not done:
+                out.append(pooled); done = True
+        else:
+            out.append([l])
+    return out
+
+
+def _load_unit(base, lines, cfg, spec):
+    """Per-line data via _line_data (targets/weights/loadings untouched); for a pooled unit also the stacked arrays."""
+    parts = []
+    for line in lines:
+        tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
+        parts.append({"line": line, "tr": tr, "te": te, "tgt": tgt, "info": info, "X": X, "Xt": Xt,
+                      "y": tgt.y_train.values, "w": tgt.w.values, "e": tr.exposure.values,
+                      "c": _aux(cfg, base, line, tr, tgt, info),
+                      "load": info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0})
+    if len(parts) == 1:
+        p = parts[0]
+        U = {k: p[k] for k in ("X", "Xt", "y", "w", "e", "c")}
+        U["g"], U["yr"], U["te_e"], U["fit_line"] = p["tr"][spec.group_col], p["tr"].period_start.dt.year.values, p["te"].exposure.values, p["line"]
+    else:
+        U = {k: np.concatenate([p[k] for p in parts]) for k in ("y", "w", "e", "c")}
+        U["X"], U["Xt"] = _concat_frames([p["X"] for p in parts], [p["Xt"] for p in parts], lines)
+        U["g"] = np.concatenate([p["tr"][spec.group_col].values for p in parts])
+        U["yr"] = np.concatenate([p["tr"].period_start.dt.year.values for p in parts])
+        U["te_e"] = np.concatenate([p["te"].exposure.values for p in parts])
+        U["fit_line"] = None
+    U["parts"] = parts
+    U["n"] = np.cumsum([0] + [len(p["tr"]) for p in parts])
+    U["nt"] = np.cumsum([0] + [len(p["te"]) for p in parts])
+    return U
+
+
+def _fit_unit(cfg, spec, U, folds, holdout):
+    """CV folds (grouped), holdout-year fit and full fit on one unit (a line, or the pooled lines). Raw predictions, no loading."""
+    X, y, w, e, c, ln = U["X"], U["y"], U["w"], U["e"], U["c"], U["fit_line"]
+    oof, iters = np.zeros(len(X)), []
+    for a, b in GroupKFold(folds).split(X, groups=U["g"]):
+        m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=ln)
+        oof[b] = p
+        iters.append(getattr(m, "best_iter", None))
+    ho_b = ho_p = None
+    if holdout:
+        a, ho_b = np.where(U["yr"] < spec.holdout_year)[0], np.where(U["yr"] == spec.holdout_year)[0]
+        n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
+        _, ho_p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[ho_b], e[ho_b], n_iter=n_ho, c=c[a], line=ln)
+    n_full = int(np.mean(iters) * 1.1) if iters[0] else None
+    m, pt = _fit_predict(cfg, X, y, w, e, U["Xt"], U["te_e"], n_iter=n_full, c=c, line=ln)
+    return {"oof": oof, "iters": iters, "ho_b": ho_b, "ho_p": ho_p, "pt": pt, "m": m}
+
+
 def quick(name: str, cfg: dict, seed: int | None = None) -> dict:
     """Fast screen: one 80/20 split grouped by policy (same split every run), one fit per line. No test predictions.
     Use to triage ideas; anything promising then gets the full 5-fold CV."""
@@ -65,17 +150,19 @@ def quick(name: str, cfg: dict, seed: int | None = None) -> dict:
     seed = spec.seed if seed is None else seed
     base = build_base()
     ys, ps, out = [], [], {}
-    for line in spec.lines:
-        tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
-        y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
-        c = _aux(cfg, base, line, tr, tgt, info)
-        load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
-        a, b = next(GroupShuffleSplit(1, test_size=spec.quick_test_size, random_state=seed).split(X, groups=tr[spec.group_col]))
-        _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=line)
-        lb = info["loading_rows"][b] if "loading_rows" in info else load
-        out[line] = d2_tweedie(tgt.y_eval.values[b], p * lb)
-        ys.append(tgt.y_eval.values[b]); ps.append(p * lb)
-        print(f"  quick {line:9s} D2 {out[line]:.4f}", flush=True)
+    for lines in _units(cfg, spec):
+        U = _load_unit(base, lines, cfg, spec)
+        X, y, w, e, c = U["X"], U["y"], U["w"], U["e"], U["c"]
+        a, b = next(GroupShuffleSplit(1, test_size=spec.quick_test_size, random_state=seed).split(X, groups=U["g"]))
+        _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=U["fit_line"])
+        for k, P in enumerate(U["parts"]):
+            line, info = P["line"], P["info"]
+            sel = (b >= U["n"][k]) & (b < U["n"][k + 1])
+            bl, pl = b[sel] - U["n"][k], p[sel]
+            lb = info["loading_rows"][bl] if "loading_rows" in info else P["load"]
+            out[line] = d2_tweedie(P["tgt"].y_eval.values[bl], pl * lb)
+            ys.append(P["tgt"].y_eval.values[bl]); ps.append(pl * lb)
+            print(f"  quick {line:9s} D2 {out[line]:.4f}", flush=True)
     out["overall"] = d2_tweedie(np.concatenate(ys), np.concatenate(ps))
     print(f"  quick OVERALL D2 {out['overall']:.4f}", flush=True)
     return out
@@ -94,43 +181,40 @@ def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, ve
     folds = spec.n_folds if folds is None else folds
     base = build_base()
     res = {"name": name, "cfg": cfg, "lines": {}}
-    for line in spec.lines:
-        tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
-        y, w, e = tgt.y_train.values, tgt.w.values, tr.exposure.values
-        c = _aux(cfg, base, line, tr, tgt, info)
-        load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
-        oof, iters = np.zeros(len(tr)), []
-        for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr[spec.group_col])):
-            m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=line)
-            oof[b] = p * (info["loading_rows"][b] if "loading_rows" in info else load)
-            iters.append(getattr(m, "best_iter", None))
-        cv = d2_tweedie(tgt.y_eval, oof)
-        calib = float(oof.sum() / tgt.y_eval.sum())          # predicted / actual total cost (guardrail: ~1)
-        ho = np.nan
-        if holdout:
-            yr = tr.period_start.dt.year.values
-            a, b = np.where(yr < spec.holdout_year)[0], np.where(yr == spec.holdout_year)[0]
-            n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
-            _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a], line=line)
-            ho = d2_tweedie(tgt.y_eval.values[b], p * (info["loading_rows"][b] if "loading_rows" in info else load))
-        n_full = int(np.mean(iters) * 1.1) if iters[0] else None
-        m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full, c=c, line=line)
-        pt_load = info.get("loading_test", load)                 # per-row array if segment loading, else scalar
+    for lines in _units(cfg, spec):
+        U = _load_unit(base, lines, cfg, spec)
+        F = _fit_unit(cfg, spec, U, folds, holdout)
+        m = F["m"]
         imp = m.importance().head(25).to_dict() if hasattr(m, "importance") else {}
-        res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
-                              "test_row_id": te.row_id.values, "test_pred": pt * pt_load, "cv": cv, "holdout": ho, "calibration": calib,
-                              "info": info, "iters": iters, "importance": imp}
-        ratio = float((np.mean(pt * pt_load / te.exposure.values)) / np.mean(oof / e))
-        res["lines"][line]["test_sanity"] = ratio
-        if not (RATIO_LO <= ratio <= RATIO_HI):
-            print(f"WARNING: {line} test predictions implausible (ratio {ratio:.2f}) - result marked unsafe", flush=True)
-            res["lines"][line]["unsafe"] = True
-            res["unsafe"] = True
-        if ho < holdout_floor:
-            print(f"WARNING: negative holdout on {line}", flush=True)
-        if verbose:
-            print(f"  {line:9s} CV D2 {cv:.4f} | {spec.holdout_year} holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
-                  f"| test mean {np.mean(pt * pt_load):,.1f} | test/oof {ratio:.2f}", flush=True)
+        for k, P in enumerate(U["parts"]):
+            line, tr, te, tgt, info, load, e = P["line"], P["tr"], P["te"], P["tgt"], P["info"], P["load"], P["e"]
+            iters = F["iters"]
+            lr = info["loading_rows"] if "loading_rows" in info else load
+            oof = F["oof"][U["n"][k]:U["n"][k + 1]] * lr
+            cv = d2_tweedie(tgt.y_eval, oof)
+            calib = float(oof.sum() / tgt.y_eval.sum())          # predicted / actual total cost (guardrail: ~1)
+            ho = np.nan
+            if holdout:
+                sel = (F["ho_b"] >= U["n"][k]) & (F["ho_b"] < U["n"][k + 1])
+                b = F["ho_b"][sel] - U["n"][k]
+                ho = d2_tweedie(tgt.y_eval.values[b], F["ho_p"][sel] * (info["loading_rows"][b] if "loading_rows" in info else load))
+            pt = F["pt"][U["nt"][k]:U["nt"][k + 1]]
+            pt_load = info.get("loading_test", load)                 # per-row array if segment loading, else scalar
+            res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,
+                                  "test_row_id": te.row_id.values, "test_pred": pt * pt_load, "cv": cv, "holdout": ho, "calibration": calib,
+                                  "info": info, "iters": iters, "importance": imp}
+            ratio = float((np.mean(pt * pt_load / te.exposure.values)) / np.mean(oof / e))
+            res["lines"][line]["test_sanity"] = ratio
+            if not (RATIO_LO <= ratio <= RATIO_HI):
+                print(f"WARNING: {line} test predictions implausible (ratio {ratio:.2f}) - result marked unsafe", flush=True)
+                res["lines"][line]["unsafe"] = True
+                res["unsafe"] = True
+            if ho < holdout_floor:
+                print(f"WARNING: negative holdout on {line}", flush=True)
+            if verbose:
+                print(f"  {line:9s} CV D2 {cv:.4f} | {spec.holdout_year} holdout {ho:.4f} | calib {calib:.3f} | iters {iters} | loading {load:.3f} "
+                      f"| test mean {np.mean(pt * pt_load):,.1f} | test/oof {ratio:.2f}", flush=True)
+    res["lines"] = {l: res["lines"][l] for l in spec.lines}
     _summarise(res)
     res["minutes"] = (time.time() - t0) / 60
     _save(res)

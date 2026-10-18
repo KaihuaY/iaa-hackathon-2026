@@ -178,3 +178,94 @@ def test_exposure_feature_adds_one_column():
     assert list(X1.columns) == list(X0.columns) + ["expo_feat"] and list(Xt1.columns) == list(Xt0.columns) + ["expo_feat"]
     assert X1[list(X0.columns)].equals(X0) and c0 == c1
     assert np.allclose(X1["expo_feat"], tr["exposure"])
+
+
+# ---- pooled lines (cfg["pool"]) ----
+def _patch_pool(monkeypatch, fits):
+    import pipeline
+
+    class Spec:
+        lines = ["motor", "buildings", "contents"]
+        n_folds = 2
+        group_col = "policy_id"
+        holdout_year = 2023
+        seed = 1
+        quick_test_size = 0.25
+        results_path = Path("unused")
+
+    sizes = {"motor": 8, "buildings": 12, "contents": 10}
+
+    def line_data(base, line, cfg):
+        n = sizes[line]
+        tr = pd.DataFrame({"row_id": np.arange(n) + 1000 * len(line), "policy_id": np.arange(n) // 2, "exposure": 1.0,
+                           "period_start": pd.to_datetime(pd.Series([2022, 2023] * (n // 2)).astype(str) + "-03-01"),
+                           "claim_count": 0})
+        te = tr.iloc[:4].copy()
+        v = np.arange(n, dtype=float)
+        tgt = pd.DataFrame({"y_train": v, "y_eval": v, "w": 1.0})
+        return tr, te, tgt, {"loading": 1.0}, pd.DataFrame({"f": v}), pd.DataFrame({"f": v[:4]})
+
+    class Stub:
+        best_iter = None
+
+        def fit(self, X, y, w, e, *a, **k):
+            fits.append(X)
+            return self
+
+        def predict(self, X, e):
+            return X["f"].values * 2.0 + 1.0
+
+    monkeypatch.setattr(pipeline, "get_spec", lambda: Spec)
+    monkeypatch.setattr(pipeline, "build_base", lambda: {})
+    monkeypatch.setattr(pipeline, "_line_data", line_data)
+    monkeypatch.setattr(pipeline, "_save", lambda r: None)
+    monkeypatch.setattr(pipeline, "_summarise", lambda r: None)
+    monkeypatch.setattr(pipeline, "make", lambda kind, params: Stub())
+    return sizes
+
+
+def test_pool_absent_fits_once_per_line_per_fold(monkeypatch):
+    import pipeline
+    fits = []
+    sizes = _patch_pool(monkeypatch, fits)
+    res = pipeline.run("t", {"model": "lgbm"}, folds=2, holdout=False, verbose=False)
+    assert len(fits) == 3 * (2 + 1)                                  # 2 folds + full fit, per line
+    assert all("line_id" not in X.columns for X in fits)
+    assert {l: len(r["oof"]) for l, r in res["lines"].items()} == sizes
+
+
+def test_pool_fits_home_lines_together_and_splits_back(monkeypatch):
+    import pipeline
+    fits = []
+    sizes = _patch_pool(monkeypatch, fits)
+    res = pipeline.run("t", {"model": "lgbm", "pool": ["buildings", "contents", "boat"]}, folds=2, holdout=True, verbose=False)
+    pooled = [X for X in fits if "line_id" in X.columns]
+    assert len(pooled) == 2 + 1 + 1                                  # 2 folds + holdout + full fit
+    assert len(fits) - len(pooled) == 4                              # motor: 2 folds + holdout + full
+    full = pooled[-1]
+    assert len(full) == sizes["buildings"] + sizes["contents"]
+    assert list(full["line_id"].cat.categories) == ["buildings", "contents"]
+    assert set(full["line_id"].unique()) == {"buildings", "contents"}
+    assert list(res["lines"]) == ["motor", "buildings", "contents"]
+    for l in sizes:
+        r = res["lines"][l]
+        assert len(r["oof"]) == len(r["row_id"]) == sizes[l] and len(r["test_pred"]) == 4 and np.isfinite(r["holdout"])
+
+
+def test_pool_oof_in_original_row_order(monkeypatch):
+    import pipeline
+    fits = []
+    sizes = _patch_pool(monkeypatch, fits)
+    res = pipeline.run("t", {"model": "lgbm", "pool": ["buildings", "contents"]}, folds=2, holdout=False, verbose=False)
+    for l, n in sizes.items():
+        assert np.allclose(res["lines"][l]["oof"], np.arange(n) * 2.0 + 1.0)
+        assert np.allclose(res["lines"][l]["test_pred"], np.arange(4) * 2.0 + 1.0)
+
+
+def test_pool_quick_pools_split(monkeypatch):
+    import pipeline
+    fits = []
+    _patch_pool(monkeypatch, fits)
+    out = pipeline.quick("t", {"model": "lgbm", "pool": ["buildings", "contents"]})
+    assert len(fits) == 2 and any("line_id" in X.columns for X in fits)
+    assert {"motor", "buildings", "contents", "overall"} <= set(out)

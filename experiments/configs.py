@@ -362,3 +362,11 @@ EXPERIMENTS.update({
     "P24_shift_tight": dict(desc="P20_135 with covariate-shift density-ratio weights, clip 0.5-2", proposer="AI (novel techniques track, D2)",
                             model="lgbm", params=_P135, target={**_T135, "shift_weights": {"clip": [0.5, 2.0]}}, features=_F135),
 })
+
+# ---- Track D4 (18 Oct): one model on buildings + contents pooled (line_id categorical); motor stays separate ----
+EXPERIMENTS.update({
+    "P25_pool_home": dict(desc="P20_135 fitted once on buildings+contents pooled (line_id categorical)", proposer="AI (novel techniques track, D4)",
+                          model="lgbm", params=_P135, target=_T135, features=_F135, pool=["buildings", "contents"]),
+    "B23_pool_home_smooth": {**EXPERIMENTS["B20_smoothboost_noexpo"], "pool": ["buildings", "contents"],
+                             "desc": "B20 smooth-boost fitted once on buildings+contents pooled (line_id one-hot)"},
+})
