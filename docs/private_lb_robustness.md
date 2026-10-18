@@ -71,3 +71,12 @@ Recommendation by max(E - sd): k = 1 (E-sd = 0.1564).
 - A 0.0006 public margin is compared with the paired sd above; where P(A>B) < ~0.9 that margin is mostly subset noise.
 - The public-vs-private gap of one candidate (section d) shows how much the same model moves across the split.
 - Differences between top-k averages are small relative to their sd; the criterion E - sd is nearly flat in k, so k is a low-stakes choice.
+
+## (e) Candidate file written 18 Oct 13:00 local (not uploaded)
+
+`final_select.py --candidates X16_blend4_noexpo --level-factors motor=1.029 buildings=1.093` →
+`submissions/20261018_1300_FINAL_part1.csv`. Level sanity against the currently submitted final
+(`20261018_0146`, LB 0.12815): overall mean ratio 1.0033, median row ratio 0.999, correlation 0.996, row-ratio
+1st/99th percentile 0.86/1.18 — the same 2025 level, with the smooth-GLM part re-ranking rows. The level factors
+were probed on X10; both files are blends of the same families, so the factors transfer. Decision on submitting it:
+the user is asked once on 22 Oct.
