@@ -51,6 +51,15 @@ The EDA dashboard (`notebooks/01_eda.py`, section 2) records each problem. `src/
 
 **Model families.** Tweedie LightGBM per line; GLM plus boosting from the GLM (`B15`); Poisson x Gamma frequency-severity GBMs (`F17`); CatBoost (`A1`). Monotone constraints (excess and no-claims discount down; prior claims and sum insured up) cost nothing in CV (0.15756 against 0.15743) and are actuarially defensible. Training power 1.35 added +0.0003 (`P20_135`).
 
+**The non-linear hunt (18 October).** Prompted to look for multiplicative structure (ln(ab) = ln a + ln b), we built a "smooth" log-link Tweedie GLM: log1p(x − min) and its square per numeric, one-hot categoricals, five interactions (sum insured x flood zone, driver age x cover type). A quick screen scored 0.1608 against 0.1522 for the banded GLM; ratio features gave trees nothing, as trees learn ratios already. Two failures followed, both invisible to random K-fold CV:
+
+| Run | Symptom | Cause and fix |
+|---|---|---|
+| First | Buildings CV 0.1117, 2023 holdout −0.66, test mean 24,016 against about 400 | Quadratic log terms extrapolate (Review 3). Inputs winsorised, predictor bounded; a guard marks a model "unsafe" (no blend, no submission) if its test pure premium per exposure is outside 0.5 to 2x out-of-fold |
+| Second | Holdout still −0.59 | Cumulative-exposure counters are calendar proxies (mean 0.00 in 2021, 2.99 in 2023), so 2023 rows were extrapolated (Review 4). Dropping them gave +0.108, near its CV |
+
+The 2025 test set was in range, but a part must pass the forward holdout to be used. Accepted: `B20`, the smooth GLM boosted by LightGBM, CV 0.1574, holdout +0.097 (tree models +0.06 to 0.07). It takes blend weight 0.16 (motor), 0.38 (buildings) and 0.39 (contents); blend `X16` reaches nested CV 0.1597 against 0.1593, predicted public LB about 0.1290 (±0.002), not submitted. A seed bag and eight peril interactions added at most 0.0001. Lesson: only the automatic forward holdout and test-mean check caught a drifting feature, so a blend cannot hide a broken part behind a small weight.
+
 **Blend.** Per-line weights are chosen on CV and scored by nested CV, where weights are chosen out of fold. A blend of blends is refused. The best family differs by line: the GLM-based model carries the larger weight for motor (0.65 in `X1`), while the standalone GBM is stronger for buildings and contents, where interactions such as soil x dry summer matter.
 
 **Credibility layer.** A Bühlmann experience adjustment plus a ridge segment layer (`src/credibility.py`). Its measured worth is small: +0.0001 nested in the blend (`X8` against `X9`), although an in-sample scan suggested up to +0.006. Kept as a marginal member and reported as such.
