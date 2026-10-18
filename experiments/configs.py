@@ -454,3 +454,9 @@ EXPERIMENTS.update({
     "X29_blend5_free": dict(desc="X21 parts plus P31 unconstrained LightGBM", proposer="AI (B4)", model="blend", step=0.1,
                             parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P31_free"]),
 })
+
+# Audit 19 Oct: annual_mileage == 0 is a sentinel (1.2 % of rows) -> NaN + indicator; free quick screen
+EXPERIMENTS.update({
+    "P32_mileage": dict(desc="P20_135 with annual_mileage 0 -> NaN + missing indicator", proposer="AI (data audit 19 Oct)", model="lgbm",
+                        params=_P135, target=_T135, features={**_F135, "mileage_zero_nan": True}),
+})

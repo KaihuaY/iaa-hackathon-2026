@@ -204,6 +204,11 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     if cfg.get("exposure_feature", False):                # row exposure (years) as a numeric feature
         X["expo_feat"] = train["exposure"].astype("float32").values
         Xt["expo_feat"] = test["exposure"].astype("float32").values
+    if cfg.get("mileage_zero_nan", False) and "annual_mileage" in X:   # audit 19 Oct: 0 is a sentinel on 1.2 % of rows
+        for F in (X, Xt):
+            z = F["annual_mileage"] == 0
+            F["mileage_missing"] = z.astype("float32").values
+            F.loc[z, "annual_mileage"] = np.nan
     cats = []
     for c in X.columns:
         if X[c].dtype == object or X[c].dtype == bool or str(X[c].dtype) == "category":
