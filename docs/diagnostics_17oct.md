@@ -65,3 +65,12 @@ overlaps ignored): 0.006.
 Lesson: the in-sample scan's 0.006 bound was real but did not survive nested validation; `make_model` effects do
 not generalise across policy folds (a few large claims), and the prior-claim segments are too small a share of the
 deviance to matter beyond ~0.0001–0.0003.
+
+## 7. Level probe result and why a flat factor is right (18 Oct 00:40 UTC)
+Public-LB probe of X10 (same rows, scaled per line): motor ×0.95/1.00/1.05 → 0.12710/0.12749/0.12752 (optimum ×1.029);
+buildings ×0.95/1.00/1.05/1.10 → 0.12690/0.12749/0.12781/0.12791 (optimum ×1.093). Calibrated file scored **0.12797**.
+Could the buildings shortfall be a weather under-reaction (2025 is the windiest year; 29 % of 2025 rows are in the top wind
+quintile vs 20 % in training)? OOF actual/pred by wind quintile is 1.02 / 1.06 / 1.01 / 0.99 / 0.96 (top quintile slightly
+*over*-predicted), rainfall 0.96–1.05, dry-summer 0.99–1.02: the model's weather response is calibrated, so the 2025
+shortfall is a year-level effect, not a weather one. A weather-dependent uplift would push the wrong way; the flat per-line
+factor is the right correction. Motor's hail/freezing calibration is within ±2 %.
