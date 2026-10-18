@@ -11,7 +11,7 @@ Only the first 5 minutes are graded. Total below: 4:50 so there is margin. Scree
 | 5 | 2:15-2:50 | Results dashboard, section 3 (what each step was worth) | Each user decision added accuracy, from a GLM at CV 0.140 through a GBM and a per-line blend to a four-way blend at 0.159, with feature stability screening alone adding 0.004. |
 | 6 | 2:50-3:25 | Results dashboard, section 2 (CV against public LB) | Local CV tracks the public leaderboard with correlation about 0.995 and noise of 0.002, so we submit only when the predicted gain is above that noise. |
 | 7 | 3:25-4:05 | `docs/ai_review_log.md` and `docs/experiment_log.md` (proposer and verification columns) | AI proposed most experiments and wrote most code, but every change passed pytest, CV and a human decision, and independent AI reviews caught bugs such as the LightGBM start-level error and a credibility ratio biased 11 to 24 % low. |
-| 8 | 4:05-4:30 | Results dashboard, section 1 (leaderboard progress) | The best public score is 0.12749, up from 0.10753 for the GLM baseline, and late gains are now inside the noise. |
+| 8 | 4:05-4:30 | Results dashboard, section 1 (leaderboard progress) | The best public score is 0.12797 (0.12749 before a one-parameter-per-line level calibration from a leaderboard probe), up from 0.10753 for the GLM baseline, and late gains are now inside the noise. |
 | 9 | 4:30-4:50 | Repo tree (`src/`, `tests/`, `experiments/configs.py`) and the Part 2 checklist from the write-up | For the new market we re-run the data-quality register, development curves, trend backtest, level probe and stability screen rather than carrying parameters over, and [TBD: what changed in Part 2]. |
 
 Notes for the recording
