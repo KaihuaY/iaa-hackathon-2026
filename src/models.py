@@ -115,9 +115,11 @@ class FreqSev:
     def __init__(self, params=None):
         params = dict(params or {})
         self.freq = LGBMTweedie({"objective": "poisson", **params.pop("freq", {})})
-        self.sev_params = {**LGBM_DEFAULT, "objective": "gamma", "min_data_in_leaf": 2000, "num_leaves": 15,
-                           **params.pop("sev", {})}
+        sev = dict(params.pop("sev", {}))
+        self.sev_n_iter = sev.pop("n_iter", 300)            # fixed rounds when no validation set / n_iter is given
+        self.sev_params = {**LGBM_DEFAULT, "objective": "gamma", "min_data_in_leaf": 2000, "num_leaves": 15, **sev}
         self.sev_params.pop("tweedie_variance_power", None)
+        self.sev_iter = None
 
     def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None,
             counts=None, counts_val=None):
@@ -126,17 +128,31 @@ class FreqSev:
         self.best_iter = self.freq.best_iter
         has = (counts > 0) & (y > 0)          # gamma needs strictly positive severities (review fix)
         sev = y[has] / counts[has]
-        self.sev_rounds = 300
         self.sev_base = float(np.log(np.average(sev, weights=counts[has])))
         dtr = lgb.Dataset(X[has], sev, weight=counts[has] * w[has], init_score=np.full(has.sum(), self.sev_base))
-        self.sev = lgb.train(self.sev_params, dtr, self.sev_rounds)
+        hv = None
+        if X_val is not None and y_val is not None and counts_val is not None and n_iter is None:
+            hv = (np.asarray(counts_val) > 0) & (np.asarray(y_val) > 0)
+        if hv is not None and hv.any():
+            cvh = np.asarray(counts_val)[hv]
+            wvh = cvh * (np.asarray(w_val)[hv] if w_val is not None else 1.0)
+            dva = lgb.Dataset(X_val[hv], np.asarray(y_val)[hv] / cvh, weight=wvh,
+                              init_score=np.full(hv.sum(), self.sev_base), reference=dtr)
+            self.sev = lgb.train(self.sev_params, dtr, 2000, valid_sets=[dva],
+                                 callbacks=[lgb.early_stopping(100, verbose=False)])
+            self.sev_iter = self.sev.best_iteration
+            self.sev_rounds = self.sev_iter
+        else:
+            self.sev_rounds = self.sev_n_iter
+            self.sev = lgb.train(self.sev_params, dtr, self.sev_rounds)
+            self.sev_iter = self.sev_rounds
         self.scale = 1.0
         self.scale = float(np.sum(w * y) / np.sum(w * self.predict(X, expo)))
         return self
 
     def predict(self, X, expo):
         f = self.freq.predict(X, expo)                       # expected claim count for the row
-        s = np.exp(self.sev.predict(X, raw_score=True) + self.sev_base)
+        s = np.exp(self.sev.predict(X, raw_score=True, num_iteration=self.sev_rounds) + self.sev_base)
         return self.scale * f * s
 
     def importance(self):

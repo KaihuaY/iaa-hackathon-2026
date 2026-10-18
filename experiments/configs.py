@@ -24,6 +24,11 @@ HIST_F = {"history": True}
 # Directions any pricing actuary would expect (+1 = cost rises with the feature); missing features are ignored.
 MONOTONE = dict(_S.monotone)
 
+# P20_135 base settings, reused by the local-loop experiments below
+_P135 = {**TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35}
+_T135 = {**FULL_T, "cap_q": 0.99, "loading": "segment"}
+_F135 = {**HIST_F, "drop": NOISE + ["make_model"]}
+
 EXPERIMENTS = {
     "E0_const": dict(desc="Average cost per line x exposure (pipeline / metric check vs host's 0.072)", proposer="AI",
                      model="const", target=RAW, features=BASE_F),
@@ -144,6 +149,37 @@ EXPERIMENTS = {
                                                                      "tweedie_variance_power": pw},
                                                target={**FULL_T, "cap_q": 0.99, "loading": "segment"},
                                                features={**HIST_F, "drop": NOISE + ["make_model"]}) for pw in (1.2, 1.35, 1.65, 1.8)},
+    # ---- local model-improvement loop (backlog) ----
+    **{f"PL_{k}": dict(desc=f"P20_135 with per-line Tweedie power motor {a} / buildings {b} / contents {c}",
+                       proposer="AI (local loop, backlog #1)", model="lgbm", params=_P135,
+                       params_by_line={"motor": {"tweedie_variance_power": a}, "buildings": {"tweedie_variance_power": b},
+                                       "contents": {"tweedie_variance_power": c}},
+                       target=_T135, features=_F135)
+       for k, (a, b, c) in {"a": (1.2, 1.5, 1.35), "b": (1.35, 1.65, 1.5), "c": (1.2, 1.65, 1.35), "d": (1.35, 1.5, 1.35)}.items()},
+    "F18_sevtune": dict(desc="F17 with tuned gamma severity (15 leaves, min leaf 500, lr 0.03, l2 50, early stopping)",
+                        proposer="AI (local loop, backlog #2)", model="freqsev",
+                        params={"freq": {**TUNED, "min_data_in_leaf": 2000},
+                                "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600}},
+                        target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "F19_sevtune2": dict(desc="F17 with tuned gamma severity (31 leaves, min leaf 200, lr 0.02, l2 100, early stopping)",
+                         proposer="AI (local loop, backlog #3)", model="freqsev",
+                         params={"freq": {**TUNED, "min_data_in_leaf": 2000},
+                                 "sev": {"num_leaves": 31, "min_data_in_leaf": 200, "learning_rate": 0.02, "lambda_l2": 100.0, "n_iter": 900}},
+                         target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "A4_cat_mono": dict(desc="A1 CatBoost with monotone constraints", proposer="AI (local loop, backlog #4)",
+                        model="catboost", params={"monotone": MONOTONE}, target={**FULL_T, "cap_q": 0.99},
+                        features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "A5_cat_deep": dict(desc="A4 CatBoost depth 8, l2 20, lr 0.04", proposer="AI (local loop, backlog #5)",
+                        model="catboost", params={"depth": 8, "l2_leaf_reg": 20, "learning_rate": 0.04, "monotone": MONOTONE},
+                        target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "A6_cat_shallow": dict(desc="A4 CatBoost depth 5, l2 5, lr 0.08", proposer="AI (local loop, backlog #6)",
+                           model="catboost", params={"depth": 5, "l2_leaf_reg": 5, "learning_rate": 0.08, "monotone": MONOTONE},
+                           target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "D1_dart": dict(desc="P20_135 with DART boosting (drop 0.1, skip 0.5); early stopping is not available in dart",
+                    proposer="AI (local loop, backlog #7)", model="lgbm",
+                    params={**_P135, "boosting": "dart", "drop_rate": 0.1, "skip_drop": 0.5}, target=_T135, features=_F135),
+    "E1_extra": dict(desc="P20_135 with extremely randomised trees", proposer="AI (local loop, backlog #8)",
+                     model="lgbm", params={**_P135, "extra_trees": True}, target=_T135, features=_F135),
     "X11_blend4": dict(desc="4-way blend: B15, P20_135 corrected (power 1.35 + credibility layer), F17_bag, A1 CatBoost",
                        proposer="AI", model="blend", step=0.1, parts=["B15_denoise_mm", "P20_135_cred", "F17_bag", "A1_catboost"]),
     # ---- branch advanced-ml ----

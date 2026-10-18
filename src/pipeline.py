@@ -39,8 +39,11 @@ def _aux(cfg, base, line, tr, tgt, info):
     return tr.claim_count.values
 
 
-def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None, cv_=None):
-    m = make(cfg["model"], cfg.get("params"))
+def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None, cv_=None, line=None):
+    params = cfg.get("params")
+    if line is not None and cfg.get("params_by_line", {}).get(line):
+        params = {**(params or {}), **cfg["params_by_line"][line]}
+    m = make(cfg["model"], params)
     if cfg["model"] in ("freqsev", "perperil"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter, counts=c, counts_val=cv_)
     elif cfg["model"] in ("lgbm", "glmboost", "catboost", "xgb"):
@@ -64,7 +67,7 @@ def quick(name: str, cfg: dict, seed: int | None = None) -> dict:
         c = _aux(cfg, base, line, tr, tgt, info)
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         a, b = next(GroupShuffleSplit(1, test_size=spec.quick_test_size, random_state=seed).split(X, groups=tr[spec.group_col]))
-        _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
+        _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=line)
         lb = info["loading_rows"][b] if "loading_rows" in info else load
         out[line] = d2_tweedie(tgt.y_eval.values[b], p * lb)
         ys.append(tgt.y_eval.values[b]); ps.append(p * lb)
@@ -90,7 +93,7 @@ def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, ve
         load = info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0
         oof, iters = np.zeros(len(tr)), []
         for k, (a, b) in enumerate(GroupKFold(folds).split(X, groups=tr[spec.group_col])):
-            m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b])
+            m, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], y[b], w[b], c=c[a], cv_=c[b], line=line)
             oof[b] = p * (info["loading_rows"][b] if "loading_rows" in info else load)
             iters.append(getattr(m, "best_iter", None))
         cv = d2_tweedie(tgt.y_eval, oof)
@@ -100,10 +103,10 @@ def run(name: str, cfg: dict, folds: int | None = None, holdout: bool = True, ve
             yr = tr.period_start.dt.year.values
             a, b = np.where(yr < spec.holdout_year)[0], np.where(yr == spec.holdout_year)[0]
             n_ho = int(np.mean([i for i in iters if i])) if iters[0] else None
-            _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a])
+            _, p = _fit_predict(cfg, X.iloc[a], y[a], w[a], e[a], X.iloc[b], e[b], n_iter=n_ho, c=c[a], line=line)
             ho = d2_tweedie(tgt.y_eval.values[b], p * (info["loading_rows"][b] if "loading_rows" in info else load))
         n_full = int(np.mean(iters) * 1.1) if iters[0] else None
-        m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full, c=c)
+        m, pt = _fit_predict(cfg, X, y, w, e, Xt, te.exposure.values, n_iter=n_full, c=c, line=line)
         pt_load = info.get("loading_test", load)                 # per-row array if segment loading, else scalar
         imp = m.importance().head(25).to_dict() if hasattr(m, "importance") else {}
         res["lines"][line] = {"row_id": tr.row_id.values, "y_eval": tgt.y_eval.values, "oof": oof,

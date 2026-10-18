@@ -19,8 +19,14 @@ class CatBoostTweedie:
                    allow_writing_files=False)
 
     def __init__(self, params=None, rounds=3000, early_stop=150):
-        self.params = {**self.DEFAULT, **(params or {})}
+        params = dict(params or {})
+        self.monotone = params.pop("monotone", {})          # {feature: +1 / -1}
+        self.params = {**self.DEFAULT, **params}
         self.rounds, self.early_stop = rounds, early_stop
+
+    def _mono_params(self, X):
+        mc = {c: int(self.monotone[c]) for c in X.columns if self.monotone.get(c)}
+        return {"monotone_constraints": mc} if mc else {}
 
     @staticmethod
     def _prep(X):
@@ -39,11 +45,12 @@ class CatBoostTweedie:
         tr = self._pool(X, y, w, self.base + np.log(expo))
         if X_val is not None and n_iter is None:
             va = self._pool(X_val, y_val, w_val, self.base + np.log(expo_val))
-            self.model = CatBoostRegressor(iterations=self.rounds, od_type="Iter", od_wait=self.early_stop, **self.params)
+            self.model = CatBoostRegressor(iterations=self.rounds, od_type="Iter", od_wait=self.early_stop,
+                                         **self.params, **self._mono_params(X))
             self.model.fit(tr, eval_set=va, use_best_model=True)
             self.best_iter = int(self.model.get_best_iteration()) + 1
         else:
-            self.model = CatBoostRegressor(iterations=n_iter or 1000, **self.params)
+            self.model = CatBoostRegressor(iterations=n_iter or 1000, **self.params, **self._mono_params(X))
             self.model.fit(tr)
             self.best_iter = n_iter or 1000
         self.scale = 1.0

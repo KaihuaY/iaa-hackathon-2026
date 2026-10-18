@@ -44,6 +44,15 @@ def predict(cv: float, model: dict | None = None) -> tuple[float, float]:
     return m["best_lb"] + m["b"] * (cv - m["best_cv"]), m["sd"]
 
 
+LEVEL_GAIN = 0.0005   # public-LB gain measured on 18 Oct from the per-line level calibration
+
+
+def predict_calibrated(cv: float, model: dict | None = None) -> tuple[float, float]:
+    """predict() plus the measured per-line level-calibration gain."""
+    p, sd = predict(cv, model)
+    return p + LEVEL_GAIN, sd
+
+
 AUTO_REL = 0.05   # user rule (17 Oct): submit without asking only if predicted LB >= 5 % above the current best
 
 
@@ -69,4 +78,5 @@ def verdict(cv: float, model: dict | None = None, margin: float = 0.002) -> str:
         tag = "material - explain to user before submitting"
     else:
         tag = "below noise - do not submit"
-    return (f"predicted LB {p:.4f} +/- {sd:.4f} (vs best {m['best_exp']} {m['best_lb']:.4f}: {gain:+.4f}, {rel:+.1%}): {tag}")
+    return (f"predicted LB {p:.4f} +/- {sd:.4f} (vs best {m['best_exp']} {m['best_lb']:.4f}: {gain:+.4f}, {rel:+.1%}): {tag}"
+            f" | with level factors: {p + LEVEL_GAIN:.4f}")
