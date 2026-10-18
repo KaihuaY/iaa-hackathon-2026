@@ -69,3 +69,12 @@ ranges in the real training and test sets) found:
 Lesson: random K-fold CV cannot see a feature that drifts with calendar time; only the forward holdout can. Any feature
 built from cumulative history must be either windowed and saturating (as the 2-year window is from 2023 on) or excluded
 from models with unbounded functional forms.
+
+## 2026-10-18 · Review 5: verification of the round-5 code written by smaller models (no defects found, one risk noted)
+
+| # | Item | Verification | Outcome |
+|---|---|---|---|
+| 1 | Pipeline refactor for pooled lines (`_units/_load_unit/_fit_unit`; fold, holdout and full-fit logic unified; loading applied after the raw fit) | Golden-hash test on the Part 1 pipeline + 91-test suite after merge | Byte-identical outputs for every config without `pool`; merged |
+| 2 | Neural residual learner (`NNBoost`): Tweedie deviance formula, exposure offset through the GLM margin, ±3 residual clamp, early stopping, rebalancing | Line-by-line read against `LGBMTweedie`/`GLMBoost`; synthetic tests (interaction recovery, calibration, unseen category); real quick screen (0.1623, early stop at epoch 1–2) | Correct; weak as a model — retune N2 queued, rejection if < the LightGBM residual |
+| 3 | Covariate-shift weights hook (`_fit_predict`): weights computed against the rows each fit predicts; mean 1; no-op without the key | Synthetic tests (same-distribution ≈ 1, shifted target, no-op); golden hash | Correct; **judge only on the 2023 holdout** (CV folds are training-distributed, so CV cannot score it) |
+| 4 | Risk: `_concat_frames` drops columns not shared by the pooled lines | Noted at review; checked on the first pooled quick screen | — |
