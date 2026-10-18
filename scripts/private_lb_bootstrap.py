@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT / "src")]
 from pipeline import load  # noqa: E402
 from metrics import tweedie_deviance, d2_tweedie  # noqa: E402
 
-CANDS = ["X16_blend4_noexpo", "X14_blend4_bags", "X12_blend4_f18", "X10_blend4", "X11_blend4"]   # 18 Oct: X16 added
+CANDS = ["X21_blend4_a1bag", "X16_blend4_noexpo", "X14_blend4_bags", "X12_blend4_f18", "X10_blend4"]   # 18 Oct: X21 (CatBoost bag) added
 KS = [1, 2, 3, 5]
 B, FRAC, SEED = 300, 0.30, 20260
 OUT = ROOT / "docs" / "private_lb_robustness.md"
