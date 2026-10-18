@@ -74,3 +74,22 @@ quintile vs 20 % in training)? OOF actual/pred by wind quintile is 1.02 / 1.06 /
 *over*-predicted), rainfall 0.96–1.05, dry-summer 0.99–1.02: the model's weather response is calibrated, so the 2025
 shortfall is a year-level effect, not a weather one. A weather-dependent uplift would push the wrong way; the flat per-line
 factor is the right correction. Motor's hail/freezing calibration is within ±2 %.
+
+## 8. Round 5 (18 Oct): what the fine-tuning and novel-technique tracks delivered
+Baselines: P20_135 quick 0.1639 / full CV 0.1582 / 2023 holdout 0.1056; smooth GLM (no counters) quick 0.1622;
+smooth-boost B20 quick 0.1628 / CV 0.1574; best blend X16 nested 0.1597.
+
+| Idea | Result | Verdict |
+|---|---|---|
+| Smooth-GLM ridge alpha 1e-5 / 1e-3 (G16/G17) | quick 0.1621 / 0.1622 | flat |
+| + motor / home interaction sets (G18/G19) | 0.1621 / 0.1622 | nothing left in hand-picked interactions |
+| Recency weighting k = 0.25 / 0.5 (P22) | 0.1635 / 0.1634 | worse than 0.1639 |
+| Exposure as a feature (P23) | 0.1636 | worse |
+| Neural residual on the smooth GLM, CANN pattern (N1; N2 regularised retune) | 0.1623 / 0.1623, early stop at epoch 1–2 | +0.0001 over its GLM base, below the LightGBM residual (0.1628): no diversity worth a blend slot |
+| Pooled buildings + contents model (P25 LightGBM, B23 smooth-boost) | 0.1606 / 0.1609; contents 0.084–0.086 | contents collapses; rejected |
+| Covariate-shift importance weights (P24, clip 0.2–5; tight 0.5–2) | CV 0.1581 both; holdout 0.1021 / 0.1056 | the train-vs-target classifier reaches AUC 1.0 against 2023 and 0.995 against 2025 through the calendar-proxy history features, so the "shift" it finds is calendar time (ESS 0.27–0.41) — a recency weighting in disguise, and recency does not help |
+
+Seven consecutive ideas below +0.0002 nested: the stop rule is met twice over. The model plateau is X16 at 0.1597
+(bootstrap: better than every earlier candidate on 96–100 % of row subsets). What remains for Part 1 is the final
+pick (user decision on 22 Oct) and the deliverables; the one untested mechanism-backed idea is a model-based
+large-loss loading (expected ≤ +0.0002).
