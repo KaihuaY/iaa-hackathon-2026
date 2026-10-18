@@ -52,6 +52,8 @@ python -P -E scripts/run_experiment.py L17_tuned --quick
   - `tests/test_pipeline.py` asserts `626_639` rows and Part 1 data. `submit.run_tests` runs the whole suite and will block `--submit`. Make those tests spec-aware, or skip them under `IAA_MARKET`, and record the change.
   - `experiments/log.csv`, `level_probe.csv`, `backtest_level.csv` and `backtest_level.py` are shared across markets. Copy Part 1 files aside first, or filter by market.
 
+**Calendar-proxy rule.** The readiness report section 7 (and `calendar_proxy_features.csv`) lists numeric features whose yearly mean drifts by more than 1 sd or that are almost all zero in the first year (cumulative-exposure history counters are the usual case). Drop flagged features from any model with unbounded terms (smooth GLM, NN); trees tolerate them. Keep the forward (latest-year) holdout as the gate: random K-fold cannot see time drift.
+
 ## Day 1: first submission
 1. Minimal chain: `python -P -E scripts/run_experiment.py B15_denoise_mm` (GLM plus GBM), then `L20_mono_lowreg`.
 2. Write a small `part2` blend config in `experiments/configs.py`, `parts=[...]`.
