@@ -225,6 +225,13 @@ EXPERIMENTS = {
                                   target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"]}),
     "X15_blend5_smooth": dict(desc="5-way blend: P20_135_bag_cred, F18_bag, A1 CatBoost, B19 smooth-boost, G14 smooth GLM", proposer="AI (non-linear hunt)",
                               model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B19_smoothboost_tuned", "G14_glm_smooth_eng"]),
+    "G15_glm_peril": dict(desc="G14 smooth GLM plus physical peril interactions (soil x dry summer, flood x rainfall, wind x roof, freezing x property age, hail x parking, flood x basement)",
+                          proposer="AI (non-linear hunt: GLM lacks peril interactions on buildings)", model="glm",
+                          params={"mode": "smooth", "alpha": 1e-4, "interactions": [
+                              ("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age"),
+                              ("dry_summer_index","soil_type"),("rainfall_mm","flood_zone"),("wind_exposure_index","roof_type"),("freezing_days","property_age"),
+                              ("hail_days","overnight_parking"),("rainfall_mm","basement"),("wind_exposure_index","trees_within_5m"),("elevation_m","flood_zone")]},
+                          target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"]}),
     "D1_dart": dict(desc="P20_135 with DART boosting (drop 0.1, skip 0.5); early stopping is not available in dart",
                     proposer="AI (local loop, backlog #7)", model="lgbm",
                     params={**_P135, "boosting": "dart", "drop_rate": 0.1, "skip_drop": 0.5}, target=_T135, features=_F135),
