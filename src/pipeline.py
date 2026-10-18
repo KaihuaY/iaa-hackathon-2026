@@ -11,7 +11,7 @@ from features import build_base, model_matrix
 from market_spec import get_spec
 from metrics import d2_tweedie
 from models import make
-from target import peril_matrix, prepare_target
+from target import apply_model_loading, peril_matrix, prepare_target
 
 
 
@@ -27,6 +27,7 @@ def _line_data(base, line, cfg):
     fcfg = dict(cfg.get("features", {}))
     fcfg["drop"] = list(fcfg.get("drop", [])) + list(fcfg.get("drop_line", {}).get(line, []))
     X, Xt, cats = model_matrix(tr, te, fcfg)
+    apply_model_loading(tgt, info, X, Xt, tr, te, cfg.get("target", {}))   # no-op unless target.loading == "model"
     return tr, te, tgt, info, X, Xt
 
 

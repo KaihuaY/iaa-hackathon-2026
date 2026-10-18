@@ -396,3 +396,22 @@ EXPERIMENTS.update({
     "X21_blend4_a1bag": dict(desc="X16 with the CatBoost seed bag", proposer="AI (round 6)", model="blend", step=0.1,
                              parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo"]),
 })
+
+# ---- Round 6: code-backed ideas (segment blend weights, model-based large-loss loading, smooth frequency base) ----
+EXPERIMENTS.update({
+    "X22_blend4_segdecile": dict(desc="X16 parts with per-segment weights by OOF risk decile (nested CV per segment)", proposer="AI (round 6)",
+                                 model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo"],
+                                 segments={"by": "oof_decile", "bins": 10, "min_rows": 50000}),
+    "X23_blend4_segquint": dict(desc="X16 parts with per-segment weights by OOF risk quintile", proposer="AI (round 6)",
+                                model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo"],
+                                segments={"by": "oof_decile", "bins": 5, "min_rows": 50000}),
+    "P27_modelload": dict(desc="P20_135 with a model-based large-loss loading (excess GBM, shrink 0.5, clipped) instead of the segment factor",
+                          proposer="AI (round 6)", model="lgbm", params=_P135,
+                          target={**FULL_T, "cap_q": 0.99, "loading": "model", "loading_params": {"shrink": 0.5, "clip": 2.0, "min_data_in_leaf": 2000}},
+                          features=_F135),
+    "F21_smoothfreq": dict(desc="F18 with a smooth Poisson GLM base under the frequency GBM (counters dropped, engineered ratios)",
+                           proposer="AI (round 6)", model="freqsev",
+                           params={"freq": {**TUNED, "min_data_in_leaf": 2000}, "freq_base": _SMOOTH_GLM,
+                                   "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600}},
+                           target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+})
