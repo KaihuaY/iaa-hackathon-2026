@@ -171,3 +171,18 @@ def test_partial_directory_does_not_crash(tmp_path):
     claims_only.mkdir()
     _claims().to_parquet(claims_only / "claims.parquet")
     assert "Adaptation checklist" in market.readiness_report(claims_only, None)
+
+
+def test_calendar_proxy_table():
+    rng = np.random.default_rng(1)
+    n = 4000
+    yr = np.repeat([2021, 2022, 2023, 2024], n // 4)
+    df = pd.DataFrame({"year": yr,
+                       "cum_expo": np.where(yr == 2021, 0.0, rng.gamma(9, 0.33, n)),
+                       "noise": rng.normal(size=n), "label": "x"})
+    t = market.calendar_proxy_table(df, "year", ["cum_expo", "noise", "label", "year"])
+    assert list(t.feature) == ["cum_expo", "noise"]          # sorted by drift; non-numeric and year dropped
+    r = t.set_index("feature")
+    assert r.loc["cum_expo", "flag"] == "proxy" and r.loc["cum_expo", "first_year_zero_share"] == 1.0
+    assert r.loc["noise", "flag"] == "" and r.loc["noise", "drift_sd"] < 0.3
+    assert "## 7. Calendar-proxy features" in market.proxy_section(t)

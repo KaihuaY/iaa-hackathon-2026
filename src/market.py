@@ -505,6 +505,56 @@ def _checklist(schema, dq, port, dev, dev_ref, drift, level) -> list[tuple[str, 
     return items
 
 
+PROXY_COLS = ["feature", "drift_sd", "first_year_zero_share", "latest_above_prior_max", "n_years", "flag", "yearly_mean", "yearly_zero_share"]
+
+
+def calendar_proxy_table(df: pd.DataFrame, year_col: str, features) -> pd.DataFrame:
+    """Flag numeric features that are calendar-time proxies (e.g. cumulative-exposure history counters).
+
+    Per feature: yearly mean and zero share; drift_sd = (max yearly mean - min yearly mean) / pooled sd;
+    latest_above_prior_max = share of the latest year's rows above the maximum of all earlier years.
+    flag = "proxy" if drift_sd > 1.0 or first-year zero share > 0.9. Sorted by drift_sd, descending.
+    """
+    years = np.sort(df[year_col].dropna().unique())
+    rows = []
+    for f in features:
+        if f == year_col or f not in df or not pd.api.types.is_numeric_dtype(df[f]) or pd.api.types.is_bool_dtype(df[f]):
+            continue
+        x = pd.to_numeric(df[f], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        g = x.groupby(df[year_col])
+        means = g.mean().reindex(years)
+        zeros = g.apply(lambda v: float((v.dropna() == 0).mean()) if v.notna().any() else np.nan).reindex(years)
+        sd = float(x.std())
+        mv = means.dropna()
+        drift = float((mv.max() - mv.min()) / sd) if len(mv) > 1 and sd > 0 else 0.0
+        above = np.nan
+        if len(years) > 1:
+            prior, last = x[df[year_col] < years[-1]].dropna(), x[df[year_col] == years[-1]].dropna()
+            if len(prior) and len(last):
+                above = float((last > prior.max()).mean())
+        z0 = float(zeros.iloc[0]) if len(zeros) and not np.isnan(zeros.iloc[0]) else 0.0
+        flag = "proxy" if (drift > 1.0 or z0 > 0.9) else ""
+        rows.append({"feature": f, "drift_sd": drift, "first_year_zero_share": z0, "latest_above_prior_max": above,
+                     "n_years": len(mv), "flag": flag,
+                     "yearly_mean": " / ".join(f"{int(y)}:{m:.3g}" for y, m in means.items()),
+                     "yearly_zero_share": " / ".join(f"{int(y)}:{z:.2f}" for y, z in zeros.items())})
+    out = pd.DataFrame(rows, columns=PROXY_COLS)
+    return out.sort_values("drift_sd", ascending=False, ignore_index=True)
+
+
+def proxy_section(tab: pd.DataFrame) -> str:
+    nl = chr(10)
+    out = ["## 7. Calendar-proxy features" + nl]
+    if tab is None or tab.empty:
+        return nl.join(out + ["_Not computed (needs the engineered training frame: run with the market spec active)._" + nl])
+    fl = tab[tab.flag == "proxy"]
+    out.append(f"{len(fl)} of {len(tab)} numeric features flagged (drift > 1.0 sd or first-year zero share > 0.9). "
+               "Flagged = calendar proxies: exclude from unbounded models (smooth GLM, NN); trees tolerate them. "
+               "K-fold CV cannot see this; gate on the forward holdout." + nl)
+    out.append(_md(tab.drop(columns=["yearly_zero_share"]).head(15), 15))
+    return nl.join(out)
+
+
 def readiness_parts(new_dir, ref_dir=None) -> dict:
     ref_ok = ref_dir is not None and _has_data(ref_dir)
     p = {"new_dir": Path(new_dir), "ref_dir": ref_dir if ref_ok else None}
@@ -554,6 +604,7 @@ def readiness_report(new_dir, ref_dir=None, parts: dict | None = None) -> str:
         out.append("_No items: the dataset matches Part 1 on all checks._" + nl)
     for i, (act, ev) in enumerate(p["items"], 1):
         out.append(f"{i}. [ ] {act}  " + nl + f"   evidence: `{ev}`")
+    out.append(nl + proxy_section(p.get("proxy")))
     return nl.join(out) + nl
 
 
