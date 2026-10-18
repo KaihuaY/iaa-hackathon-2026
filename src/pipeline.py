@@ -254,6 +254,55 @@ def _stack_apply(w, P):
     return np.exp(w["intercept"] + np.log(np.clip(P, 1e-6, None)) @ w["coef"])
 
 
+def _bin_edges(v, bins):
+    """Interior cut points: quantiles if `bins` is an int, else the given edges."""
+    if isinstance(bins, (list, tuple)):
+        return np.asarray(sorted(bins), float)
+    return np.unique(np.quantile(v[~np.isnan(v)], np.linspace(0, 1, int(bins) + 1)[1:-1]))
+
+
+def _segment_labels(seg, line, P, T, ids, base):
+    """Segment label (str) per OOF row and per test row, plus the definition. Train cut points are reused for test.
+
+    seg['by'] == 'oof_decile': value = equal-weight mean of the parts' predictions per exposure.
+    Otherwise `by` is a column of base['train_<line>'] / base['test_<line>'], matched on row_id.
+    Segments with fewer than seg.get('min_rows', 50000) OOF rows are merged into 'rest'."""
+    by, bins = seg["by"], seg.get("bins", 10)
+    tr = base[f"train_{line}"].set_index("row_id").reindex(ids["oof"])
+    te = base[f"test_{line}"].set_index("row_id").reindex(ids["test"])
+    assert not tr.exposure.isna().any() and not te.exposure.isna().any(), "segment rows missing from base frames"
+    if by == "oof_decile":
+        v_tr = P.mean(axis=1) / np.clip(tr.exposure.values, 1e-9, None)
+        v_te = T.mean(axis=1) / np.clip(te.exposure.values, 1e-9, None)
+        numeric = True
+    else:
+        c_tr, c_te = tr[by], te[by]
+        numeric = pd.api.types.is_numeric_dtype(c_tr) and not pd.api.types.is_bool_dtype(c_tr)
+        v_tr, v_te = (c_tr.to_numpy(float), c_te.to_numpy(float)) if numeric else (c_tr, c_te)
+    if numeric:
+        edges = _bin_edges(v_tr, bins)
+
+        def lab(v):
+            out = np.array([f"q{i}" for i in np.searchsorted(edges, v, side="right")], dtype=object)
+            out[np.isnan(v)] = "nan"
+            return out
+        a, b = lab(v_tr), lab(v_te)
+        definition = {"by": by, "kind": "numeric", "edges": edges.tolist()}
+    else:
+        a = np.asarray(v_tr.astype(object).where(v_tr.notna(), "nan").astype(str), dtype=object)
+        b = np.asarray(v_te.astype(object).where(v_te.notna(), "nan").astype(str), dtype=object)
+        definition = {"by": by, "kind": "categorical"}
+    names, counts = np.unique(a, return_counts=True)
+    min_rows = seg.get("min_rows", 50000)
+    small = set(names[counts < min_rows])
+    known = set(names) - small
+    a = np.array([x if x in known else "rest" for x in a], dtype=object)
+    b = np.array([x if x in known else "rest" for x in b], dtype=object)
+    definition["min_rows"] = min_rows
+    definition["merged_into_rest"] = sorted(small)
+    return a, b, definition
+
+
 def run_blend(name: str, cfg: dict, folds: int | None = None) -> dict:
     """Per-line weights over cfg['parts'] (2 or more single models) on a simplex grid, chosen on OOF D².
 
@@ -277,6 +326,8 @@ def run_blend(name: str, cfg: dict, folds: int | None = None) -> dict:
             if pl.get("unsafe") or not (RATIO_LO <= r <= RATIO_HI):
                 raise ValueError(f"part {pname} unsafe on {line}: ratio {r:.2f}")
     res = {"name": name, "cfg": cfg, "lines": {}}
+    seg_cfg = cfg.get("segments")
+    base = build_base() if seg_cfg else None
     nested_y, nested_p = [], []
     for line in spec.lines:
         L = [pt["lines"][line] for pt in parts]
@@ -294,17 +345,45 @@ def run_blend(name: str, cfg: dict, folds: int | None = None) -> dict:
             fit_fn = lambda yy, PP: _best_weights(yy, PP, grid)[0]
             apply_fn = lambda w_, PP: PP @ w_
         w = fit_fn(y, P)
-        score = d2_tweedie(y, apply_fn(w, P))
+        wcoef = lambda w_: w_["coef"] if cfg.get("stack") else w_
+        if seg_cfg:
+            sa, sb, sdef = _segment_labels(seg_cfg, line, P, T, {"oof": L[0]["row_id"], "test": L[0]["test_row_id"]}, base)
+            labels = sorted(set(sa))
+            print(f"  {line:9s} segments by {seg_cfg['by']}: " + ", ".join(f"{k}={int((sa == k).sum())}" for k in labels), flush=True)
+
+            def seg_fit(idx):
+                return {k: fit_fn(y[idx][sa[idx] == k], P[idx][sa[idx] == k]) for k in labels}
+
+            def seg_apply(W_, PP, lab):
+                out = np.zeros(len(PP))
+                for k in labels:
+                    m_ = lab == k
+                    if m_.any():
+                        out[m_] = apply_fn(W_[k], PP[m_])
+                return out
+            W = seg_fit(np.arange(len(y)))
+            oof_pred, test_pred = seg_apply(W, P, sa), seg_apply(W, T, sb)
+        else:
+            oof_pred, test_pred = apply_fn(w, P), apply_fn(w, T)
+        score = d2_tweedie(y, oof_pred)
         nest = np.zeros_like(y, dtype=float)
         for tr_idx, va_idx in GroupKFold(folds).split(y, groups=ids[spec.group_col].values):
-            nest[va_idx] = apply_fn(fit_fn(y[tr_idx], P[tr_idx]), P[va_idx])
+            if seg_cfg:
+                nest[va_idx] = seg_apply(seg_fit(tr_idx), P[va_idx], sa[va_idx])
+            else:
+                nest[va_idx] = apply_fn(fit_fn(y[tr_idx], P[tr_idx]), P[va_idx])
         nested_y.append(y)
         nested_p.append(nest)
-        wv = w["coef"] if cfg.get("stack") else w
-        res["lines"][line] = {**L[0], "oof": apply_fn(w, P), "test_pred": apply_fn(w, T), "cv": score,
+        wv = wcoef(w)
+        res["lines"][line] = {**L[0], "oof": oof_pred, "test_pred": test_pred, "cv": score,
                               "cv_nested": d2_tweedie(y, nest), "holdout": np.nan,
                               "weight": float(wv[0]), "weights": dict(zip(cfg["parts"], map(float, wv)))}
-        wtxt = ", ".join(f"{k}={v:.2f}" for k, v in res["lines"][line]["weights"].items())
+        if seg_cfg:
+            res["lines"][line]["weights"] = {k: dict(zip(cfg["parts"], map(float, wcoef(W[k])))) for k in labels}
+            res["lines"][line]["segments"] = {**sdef, "sizes": {k: int((sa == k).sum()) for k in labels}}
+        wd = res["lines"][line]["weights"]
+        wtxt = "; ".join(f"{k}: " + ",".join(f"{v:.2f}" for v in d.values()) for k, d in wd.items()) if seg_cfg else \
+            ", ".join(f"{k}={v:.2f}" for k, v in wd.items())
         print(f"  {line:9s} weights {wtxt} | CV D2 {score:.4f} | nested {res['lines'][line]['cv_nested']:.4f}", flush=True)
     _summarise(res)
     res["cv_nested"] = d2_tweedie(np.concatenate(nested_y), np.concatenate(nested_p))

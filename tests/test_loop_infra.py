@@ -269,3 +269,81 @@ def test_pool_quick_pools_split(monkeypatch):
     out = pipeline.quick("t", {"model": "lgbm", "pool": ["buildings", "contents"]})
     assert len(fits) == 2 and any("line_id" in X.columns for X in fits)
     assert {"motor", "buildings", "contents", "overall"} <= set(out)
+
+
+# ---- per-segment blend weights ----
+def _seg_world(monkeypatch, n=4000, m=1000, seed=0):
+    import pipeline
+    rng = np.random.default_rng(seed)
+
+    def make(k):
+        g = (np.arange(k) % 2).astype(int)
+        mu = np.exp(rng.normal(0, 0.5, k))
+        noise = lambda: np.exp(rng.normal(0, 0.9, k))
+        a = mu * np.where(g == 0, 1.0, noise())      # A exact on g=0, noisy on g=1
+        b = mu * np.where(g == 1, 1.0, noise())      # B the opposite
+        return g, mu, a, b
+
+    g, mu, a, b = make(n)
+    gt, mut, at, bt = make(m)
+    y = rng.gamma(2.0, mu / 2.0) * (rng.random(n) < 0.7)
+    mk = lambda o, t: {"cfg": {"model": "lgbm"}, "lines": {"motor": {
+        "row_id": np.arange(n), "y_eval": y, "oof": o, "test_row_id": np.arange(m), "test_pred": t, "holdout": np.nan}}}
+    parts = {"a": mk(a, at), "b": mk(b, bt)}
+
+    class Spec:
+        lines = ["motor"]
+        n_folds = 3
+        group_col = "policy_id"
+        cache_path = Path("unused")
+        results_path = Path("unused")
+
+    monkeypatch.setattr(pipeline, "get_spec", lambda: Spec)
+    monkeypatch.setattr(pipeline, "load", lambda nm: parts[nm])
+    monkeypatch.setattr(pipeline, "_save", lambda r: None)
+    monkeypatch.setattr(pipeline.pd, "read_parquet",
+                        lambda *aa, **k: pd.DataFrame({"row_id": np.arange(n), "policy_id": np.arange(n) // 2}))
+    cat = np.where(np.arange(n) < 10, "tiny", np.where(g == 0, "lo", "hi"))     # rare level for the min_rows test
+    base = {"train_motor": pd.DataFrame({"row_id": np.arange(n), "exposure": np.ones(n), "g": g, "cat": cat}),
+            "test_motor": pd.DataFrame({"row_id": np.arange(m), "exposure": np.ones(m), "g": gt,
+                                        "cat": np.where(gt == 0, "lo", "hi")})}
+    monkeypatch.setattr(pipeline, "build_base", lambda: base)
+    return pipeline
+
+
+def test_blend_segments_absent_is_unchanged(monkeypatch):
+    pipeline = _seg_world(monkeypatch)
+    cfg = {"model": "blend", "parts": ["a", "b"], "step": 0.1}
+    l0 = pipeline.run_blend("x", cfg)["lines"]["motor"]
+    l1 = pipeline.run_blend("x", dict(cfg))["lines"]["motor"]
+    assert l0["cv"] == l1["cv"] and l0["cv_nested"] == l1["cv_nested"]
+    assert (l0["test_pred"] == l1["test_pred"]).all() and "segments" not in l0
+    assert set(l0["weights"]) == {"a", "b"}
+
+
+def test_blend_segments_beat_unsegmented_and_weights_differ(monkeypatch):
+    pipeline = _seg_world(monkeypatch)
+    cfg = {"model": "blend", "parts": ["a", "b"], "step": 0.1}
+    plain = pipeline.run_blend("x", cfg)["lines"]["motor"]
+    seg = pipeline.run_blend("x", {**cfg, "segments": {"by": "g", "bins": 2, "min_rows": 100}})["lines"]["motor"]
+    assert seg["cv_nested"] > plain["cv_nested"]
+    w = seg["weights"]
+    assert set(w) == {"q0", "q1"} and seg["segments"]["by"] == "g"
+    assert w["q0"]["a"] > 0.7 and w["q1"]["b"] > 0.7           # A wins on g=0, B on g=1
+    assert len(seg["test_pred"]) == 1000 and np.isfinite(seg["test_pred"]).all()
+
+
+def test_blend_segments_oof_decile_runs(monkeypatch):
+    pipeline = _seg_world(monkeypatch)
+    res = pipeline.run_blend("x", {"model": "blend", "parts": ["a", "b"], "step": 0.5,
+                                   "segments": {"by": "oof_decile", "bins": 4, "min_rows": 100}})
+    assert len(res["lines"]["motor"]["weights"]) == 4 and np.isfinite(res["cv_nested"])
+
+
+def test_blend_segments_min_rows_merges_into_rest(monkeypatch):
+    pipeline = _seg_world(monkeypatch)
+    res = pipeline.run_blend("x", {"model": "blend", "parts": ["a", "b"], "step": 0.5,
+                                   "segments": {"by": "cat", "min_rows": 100}})
+    s = res["lines"]["motor"]["segments"]
+    assert s["merged_into_rest"] == ["tiny"] and s["sizes"]["rest"] == 10
+    assert set(res["lines"]["motor"]["weights"]) == {"hi", "lo", "rest"}
