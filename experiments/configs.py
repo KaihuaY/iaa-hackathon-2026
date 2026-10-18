@@ -307,3 +307,38 @@ EXPERIMENTS = {
     "G11_cap999": dict(desc="G6 with cap at 99.9th pct", proposer="AI (cap level sensitivity)",
                        model="glm", target={**FULL_T, "cap_q": 0.999}, features=HIST_F),
 }
+
+
+# ---- Track A1 / D5 / D6 (local loop): smooth-GLM base grid, recency weighting, exposure as a feature ----
+_G14_INT = [("sum_insured", "flood_zone"), ("driver_age", "cover_type"), ("ncb_years", "driver_age"),
+            ("annual_mileage", "vehicle_value_group"), ("sum_insured", "property_age")]
+_INT_MOTOR = [("vehicle_age", "annual_mileage"), ("driver_age", "annual_mileage"),
+              ("vehicle_value_group", "vehicle_age"), ("ncb_years", "cover_type")]
+_INT_HOME = [("sum_insured", "bedrooms"), ("property_age", "roof_type"), ("flood_zone", "basement"),
+             ("sum_insured", "construction_type"), ("elevation_m", "distance_to_river_km")]
+_G_T = {**FULL_T, "cap_q": 0.99}
+_G_F = {**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}
+
+
+def _g(desc, alpha, interactions):
+    return dict(desc=desc, proposer="AI (local loop, track A1)", model="glm",
+                params={"mode": "smooth", "alpha": alpha, "interactions": interactions}, target=_G_T, features=_G_F)
+
+
+EXPERIMENTS.update({
+    "G16_alpha_lo": _g("G14 smooth GLM (no counters), alpha 1e-5", 1e-5, _G14_INT),
+    "G17_alpha_hi": _g("G14 smooth GLM (no counters), alpha 1e-3", 1e-3, _G14_INT),
+    "G18_int_motor": _g("G14 smooth GLM (no counters) plus motor interactions", 1e-4, _G14_INT + _INT_MOTOR),
+    "G19_int_home": _g("G14 smooth GLM (no counters) plus home interactions", 1e-4, _G14_INT + _INT_HOME),
+    "B22_smoothboost_best": {**EXPERIMENTS["B20_smoothboost_noexpo"],
+                             "desc": "B20 with the G18+G19 interaction set in the smooth GLM base",
+                             "params": {**EXPERIMENTS["B20_smoothboost_noexpo"]["params"],
+                                        "glm": {"mode": "smooth", "alpha": 1e-4,
+                                                "interactions": _G14_INT + _INT_MOTOR + _INT_HOME}}},
+    "P22_recency25": dict(desc="P20_135 with recency weights 1+0.25*(year-2021), mean-normalised", proposer="AI (local loop, D5)",
+                          model="lgbm", params=_P135, target={**_T135, "recency": 0.25}, features=_F135),
+    "P22_recency50": dict(desc="P20_135 with recency weights 1+0.5*(year-2021), mean-normalised", proposer="AI (local loop, D5)",
+                          model="lgbm", params=_P135, target={**_T135, "recency": 0.5}, features=_F135),
+    "P23_expofeat": dict(desc="P20_135 with row exposure as a numeric feature", proposer="AI (local loop, D6)",
+                         model="lgbm", params=_P135, target=_T135, features={**_F135, "exposure_feature": True}),
+})

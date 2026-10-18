@@ -214,6 +214,11 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
     df["y_dev"] = df.rep_eval + ibnr_eval            # developed actual, untrended (used by the level backtest)
     wp = cfg.get("weight_power", 0.0)
     df["w"] = df.completeness.clip(lower=0.05) ** wp if wp else 1.0
+    k_rec = cfg.get("recency", 0.0)
+    if k_rec:                                         # later policy years weigh more; mean weight unchanged
+        w0 = df.w.astype(float)
+        w1 = w0 * (1.0 + k_rec * (df.year - df.year.min()))
+        df["w"] = w1 * (w0.mean() / w1.mean())
     info = {"line": line, "cap": cap, "loading": loading, "trend": tf, "trend_method": method,
             "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
     if cfg.get("loading") == "segment" and cap:
