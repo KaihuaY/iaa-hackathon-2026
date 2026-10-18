@@ -223,4 +223,23 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
             "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
     if cfg.get("loading") == "segment" and cap:
         info["loading_rows"], info["loading_test"], info["loading_table"] = segment_loading(pol, test, lc, cost, capped, line)
+    if cfg.get("loading") == "model" and cap:             # per-row untrended totals for apply_model_loading
+        rid = lc.row_id
+        info["loading_inputs"] = {"y_total": df.row_id.map(cost.groupby(rid).sum()).fillna(0.0).values,
+                                  "y_capped": df.row_id.map(capped.groupby(rid).sum()).fillna(0.0).values}
     return df[["row_id", "y_train", "y_eval", "y_dev", "w", "completeness", "ibnr"]], info
+
+
+def apply_model_loading(tgt, info, X, Xt, tr, te, cfg):
+    """cfg["loading"] == "model": fill info["loading_rows"/"loading_test"] from largeloss.model_loading.
+    cfg is the target cfg (optional key "loading_params"). Call right after _line_data (X, Xt are not visible to
+    prepare_target). No-op unless loading == "model" and the line is capped."""
+    if cfg.get("loading") != "model" or "loading_inputs" not in info:
+        return info
+    from largeloss import model_loading
+    from market_spec import get_spec
+    li = info["loading_inputs"]
+    info["loading_rows"], info["loading_test"], info["loading_diag"] = model_loading(
+        X, Xt, li["y_total"], li["y_capped"], tr["exposure"].values, tgt["w"].values,
+        tr[get_spec().group_col].values, info["loading"], cfg.get("loading_params"))
+    return info
