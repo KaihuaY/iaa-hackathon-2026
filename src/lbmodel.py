@@ -23,7 +23,7 @@ def fit(log: pd.DataFrame | None = None) -> dict:
     d = d[mk == get_spec().name]
     d = d.assign(lb=pd.to_numeric(d.lb_public, errors="coerce"),
                  cvx=pd.to_numeric(d.get("cv_nested", d.cv), errors="coerce").fillna(d.cv))
-    d = d[d.lb.notna() & ~d.decision.fillna("").str.contains("|".join(EXCLUDE))]
+    d = d[d.lb.notna() & d.cvx.notna() & ~d.decision.fillna("").str.contains("|".join(EXCLUDE))]   # probe/scaled rows have no CV
     if len(d) < MIN_HISTORY:
         return {"a": np.nan, "b": np.nan, "sd": np.nan, "n": len(d), "corr": np.nan, "best_lb": np.nan,
                 "best_cv": np.nan, "best_exp": ""}

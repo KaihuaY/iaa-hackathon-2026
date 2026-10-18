@@ -52,13 +52,17 @@ def fmt_table(df, fmts=None):
 
 
 sub = log[log.lb.notna()].sort_values("t")
-m = lbmodel.fit()
-best = sub.loc[sub.lb.idxmax()]
+m = lbmodel.fit(log[log.cv.notna()])  # rows without a CV (scaled copies) cannot enter the CV -> LB fit
+_bcv = sub[sub.cv.notna()]
+best = _bcv.loc[_bcv.lb.idxmax()]
+_cal = log[log.exp == "X10_levelcal"]
+_cal_row = (f"| **Best public LB (level-calibrated)** | **{_cal.lb.iloc[0]:.5f}** (X10_levelcal) |\n"
+            if len(_cal) and pd.notna(_cal.lb.iloc[0]) else "")
 display(Markdown(f"""
 | | |
 |---|---|
-| **Best public LB** | **{best.lb:.5f}** ({best.exp}) |
-| Submissions made | {len(sub)} |
+| **Best public LB (by CV)** | **{best.lb:.5f}** ({best.exp}) |
+{_cal_row}| Submissions made | {len(sub)} |
 | Experiments run locally | {len(log)} |
 | CV → LB agreement | corr {m['corr']:.3f} on {m['n']} submissions, typical error ±{m['sd']:.4f} |
 """))
@@ -115,13 +119,17 @@ steps = [("E1_glm", "GLM, raw labels"), ("G3_dev", "+ develop to ultimate"), ("G
          ("G6_trend", "+ experience, trend, weights"), ("B6_boost", "+ GBM boosting from GLM"),
          ("L6_lgbm", "standalone GBM"), ("X1_blend", "blend B6 + L6"), ("X2_blend", "blend, cap 99%"),
          ("X3_blend", "blend, noise features removed"), ("X4_blend3", "3-way blend + freq x sev"), ("X5_blend3", "3-way blend, tuned GBMs"), ("X6_blend3bag", "X5 + seed bagging"), ("L19_segload", "segment loading"),
-         ("L20_mono_lowreg", "+ monotone, less reg."), ("X10_blend4", "4-way blend + CatBoost + credibility")]
+         ("L20_mono_lowreg", "+ monotone, less reg."), ("X10_blend4", "4-way blend + CatBoost + credibility"),
+         ("X10_levelcal", "+ LB-calibrated 2025 level")]
 st = log.set_index("exp").reindex([s for s, _ in steps])
+st.loc["X10_levelcal", "cv"] = st.loc["X10_blend4", "cv"]  # scaled copy of X10, no CV of its own
 lab = [f"{s}<br>{t}" for s, t in steps]
 fig = make_subplots(rows=1, cols=2, column_widths=[0.4, 0.6], subplot_titles=("Overall CV", "CV by line"), horizontal_spacing=0.08)
 fig.add_bar(x=lab, y=st.cv, marker_color=SERIES[0], showlegend=False, row=1, col=1, hovertemplate="%{x}<br>CV %{y:.4f}<extra></extra>")
+fig.add_annotation(x=lab[-1], y=st.cv.iloc[-1], text="LB only", showarrow=True, arrowhead=2, ax=0, ay=-28,
+                   font=dict(size=10, color=INK2), xref="x", yref="y")
 for l in LINES:
-    fig.add_scatter(x=lab, y=st[f"cv_{l}"], mode="lines+markers", line_color=LINE_COLOURS[l], name=l, row=1, col=2,
+    fig.add_scatter(x=lab[:-1], y=st[f"cv_{l}"].iloc[:-1], mode="lines+markers", line_color=LINE_COLOURS[l], name=l, row=1, col=2,
                     hovertemplate="%{x}<br>" + l + " CV %{y:.4f}<extra></extra>")
 fig.update_yaxes(range=[0.13, st.cv.max() + 0.004], row=1, col=1)
 fig.update_xaxes(tickfont=dict(size=9))
@@ -207,6 +215,58 @@ else:
     display(Markdown("*Backtest not run yet.*"))
 
 # %% [markdown]
+# ## 5b · Level probe (2025 price level)
+# The public leaderboard scores a fixed set of rows, so scaled copies of one file differ with **zero sampling noise**: any
+# score change is the effect of the scale alone. A parabola through the probe points of each line gives the LB-optimal 2025
+# price level for that line. Dashed vertical line = fitted optimum; dotted horizontal line = the calibrated submission.
+
+# %%
+from metrics import d2_tweedie
+
+probe_path = RES / "level_probe.csv"
+if probe_path.exists():
+    pr = pd.read_csv(probe_path)
+    pr = pr[pr.base == "X10_blend4"]
+    base_lb = float(log.loc[log.exp == "X10_blend4", "lb"].iloc[0])
+    cal_lb = log.loc[log.exp == "X10_levelcal", "lb"]
+    cal_lb = float(cal_lb.iloc[0]) if len(cal_lb) and pd.notna(cal_lb.iloc[0]) else None
+    x10 = load("X10_blend4")
+    pl = [l for l in ["motor", "buildings"] if (pr.line == l).any()]
+    fig = make_subplots(rows=1, cols=len(pl), subplot_titles=[f"{l}: public LB vs scale" for l in pl], horizontal_spacing=0.1)
+    rows = []
+    for i, l in enumerate(pl, start=1):
+        p = pr[pr.line == l]
+        sc = np.r_[p.scale.values, 1.0]
+        lbs = np.r_[p.lb_public.values, base_lb]
+        order = np.argsort(sc)
+        sc, lbs = sc[order], lbs[order]
+        a, b, c = np.polyfit(sc, lbs, 2)
+        opt = -b / (2 * a)
+        grid = np.linspace(min(sc.min(), opt) - 0.02, max(sc.max(), opt) + 0.02, 100)
+        fig.add_scatter(x=grid, y=np.polyval([a, b, c], grid), mode="lines", line=dict(color=LINE_COLOURS[l], width=1.5),
+                        name="quadratic fit", showlegend=(i == 1), hoverinfo="skip", row=1, col=i)
+        fig.add_scatter(x=sc, y=lbs, mode="markers", marker=dict(color=LINE_COLOURS[l], size=10), name="probe points",
+                        showlegend=(i == 1), hovertemplate="scale %{x:.2f}<br>LB %{y:.5f}<extra></extra>", row=1, col=i)
+        fig.add_vline(x=opt, line=dict(color=MUTED, dash="dash", width=1), row=1, col=i,
+                      annotation_text=f"optimum {opt:.3f}", annotation_font_size=10)
+        if cal_lb is not None:
+            fig.add_hline(y=cal_lb, line=dict(color=NEUTRAL, dash="dot", width=1), row=1, col=i,
+                          annotation_text=f"calibrated {cal_lb:.5f}", annotation_font_size=10, annotation_position="bottom right")
+        d = x10["lines"][l]
+        y_ev, oof = np.asarray(d["y_eval"], float), np.asarray(d["oof"], float)
+        ss = np.linspace(0.9, 1.1, 21)
+        oc = np.polyfit(ss, [d2_tweedie(y_ev, oof * s_) for s_ in ss], 2)[0]
+        rows.append({"line": l, "points": len(sc), "optimal scale": opt, "LB curvature": a, "local OOF curvature": oc})
+    fig.update_xaxes(title_text="scale on 2025 prices")
+    fig.update_yaxes(title_text="public LB", row=1, col=1)
+    fig.update_layout(height=420)
+    fig.show()
+    display(fmt_table(pd.DataFrame(rows).set_index("line"),
+                      {"optimal scale": "{:.3f}", "LB curvature": "{:.3f}", "local OOF curvature": "{:.3f}"}))
+else:
+    print("probe not run")
+
+# %% [markdown]
 # ## 6 · Inside the models
 
 # %%
@@ -236,14 +296,14 @@ cols = ["exp", "description", "proposer", "cv", "holdout_2023", "lb_pred", "lb_p
 display(fmt_table(log[cols].set_index("exp"), {"cv": "{:.4f}", "holdout_2023": "{:.4f}", "lb_pred": "{:.4f}"}))
 
 # %% [markdown]
-# ## 8 · Decisions for you (round 2)
+# ## 8 · Decisions for you (round 3)
 # Ranked by impact. Pick options and add notes, then **Download choices (JSON)** and save it as
-# `docs/decisions_round2.json`. Nothing is submitted to Kaggle without your go-ahead.
+# `docs/decisions_round3.json`. Nothing is submitted to Kaggle without your go-ahead.
 
 # %%
 import importlib
 import board
 import decisions_round2
 importlib.reload(decisions_round2)
-html = board.render_board(decisions_round2.DECISIONS).replace("iaa-decision-board-v1", "iaa-decision-board-round2")
+html = board.render_board(decisions_round2.DECISIONS).replace("iaa-decision-board-v1", "iaa-decision-board-round3")
 HTML(html)
