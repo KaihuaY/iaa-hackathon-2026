@@ -248,6 +248,15 @@ EXPERIMENTS = {
                     parts=["B20_smoothboost_noexpo", "B20_s101", "B20_s202"]),
     "X17_blend4_b20bag": dict(desc="X16 with the B20 seed bag", proposer="AI (non-linear hunt)",
                               model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_bag"]),
+    # Same smooth GLM base, boosted by CatBoost (the best single buildings learner) instead of LightGBM: a second
+    # smooth-base part with a different residual learner for blend diversity
+    "B21_smoothcat": dict(desc="Smooth GLM base (no counters) boosted by CatBoost (A1 defaults + monotone)",
+                          proposer="AI (non-linear hunt)", model="glmboost",
+                          params={"boost": "catboost", "glm": {"mode": "smooth", "alpha": 1e-4, "interactions": [("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age")]},
+                                  "monotone": MONOTONE},
+                          target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+    "X18_blend5_smoothcat": dict(desc="X17 plus B21 smooth-CatBoost", proposer="AI (non-linear hunt)",
+                                 model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_bag", "B21_smoothcat"]),
     "G15_glm_peril": dict(desc="G14 smooth GLM plus physical peril interactions (soil x dry summer, flood x rainfall, wind x roof, freezing x property age, hail x parking, flood x basement)",
                           proposer="AI (non-linear hunt: GLM lacks peril interactions on buildings)", model="glm",
                           params={"mode": "smooth", "alpha": 1e-4, "interactions": [
