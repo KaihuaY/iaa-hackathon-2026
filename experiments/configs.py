@@ -429,3 +429,8 @@ EXPERIMENTS.update({
     "X25_blend5_p27": dict(desc="X21 plus P27 model-loaded LightGBM", proposer="AI (round 6)", model="blend", step=0.1,
                            parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P27_modelload"]),
 })
+
+EXPERIMENTS.update({
+    "X26_blend5_p28": dict(desc="X21 plus P28 per-line-cap LightGBM", proposer="AI (round 6)", model="blend", step=0.1,
+                           parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P28_capline"]),
+})

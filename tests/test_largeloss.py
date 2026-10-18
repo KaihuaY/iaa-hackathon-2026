@@ -54,3 +54,11 @@ def test_shapes_and_capped_pred():
     cp = (yc + 1.0, np.full(len(Xt), 100.0))
     lr, lt, d = model_loading(X, Xt, yt, yc, e, np.ones(len(X)), g, 1.2, {**P, "capped_pred": cp})
     assert len(lr) == len(X) and len(lt) == len(Xt) and np.isfinite(lr).all() and np.isfinite(lt).all()
+
+
+def test_num_accepts_pandas_categorical():
+    import pandas as pd
+    from largeloss import _num
+    X = pd.DataFrame({"a": pd.Categorical(["x", "y", "x"]), "b": [1.0, np.nan, 3.0], "c": [True, False, True]})
+    A = _num(X)
+    assert A.shape == (3, 3) and A[0, 0] == 0.0 and A[1, 0] == 1.0 and np.isnan(A[1, 1]) and A[0, 2] == 1.0

@@ -1,5 +1,6 @@
 """Model-based large-loss loading: loading(x) = 1 + E[excess | x] / E[capped | x], shrunk toward the flat factor."""
 import numpy as np
+import pandas as pd
 import lightgbm as lgb
 from sklearn.model_selection import GroupKFold
 
@@ -25,7 +26,7 @@ def _num(X):
     if hasattr(X, "columns"):                              # category/object columns -> integer codes (NaN for missing)
         X = X.copy()
         for c in X.columns:
-            if not np.issubdtype(X[c].dtype, np.number) and X[c].dtype != bool:
+            if not pd.api.types.is_numeric_dtype(X[c]) and not pd.api.types.is_bool_dtype(X[c]):
                 X[c] = X[c].astype("category").cat.codes.astype(float).replace(-1, np.nan)
         return X.to_numpy(dtype=float)
     return np.asarray(X, dtype=float)
