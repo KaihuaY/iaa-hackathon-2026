@@ -342,3 +342,15 @@ EXPERIMENTS.update({
     "P23_expofeat": dict(desc="P20_135 with row exposure as a numeric feature", proposer="AI (local loop, D6)",
                          model="lgbm", params=_P135, target=_T135, features={**_F135, "exposure_feature": True}),
 })
+
+# ---- Track D1 (18 Oct): CANN-style neural residual on the smooth GLM base (user-approved PyTorch CPU) ----
+_SMOOTH_GLM = {"mode": "smooth", "alpha": 1e-4, "interactions": [("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age")]}
+EXPERIMENTS.update({
+    "N1_nnboost": dict(desc="Smooth GLM base (no counters) + neural residual (MLP 2x128, embeddings, Tweedie loss, residual clamp +-3)",
+                       proposer="AI (novel techniques track, CANN pattern)", model="nnboost",
+                       params={"glm": _SMOOTH_GLM, "hidden": 128, "dropout": 0.1, "lr": 1e-3, "batch": 4096, "epochs": 30,
+                               "patience": 3, "weight_decay": 1e-5, "tweedie_variance_power": 1.5, "seed": 7, "threads": 12},
+                       target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+    "X19_blend5_nn": dict(desc="X16 plus the neural residual part", proposer="AI (novel techniques track)",
+                          model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo", "N1_nnboost"]),
+})

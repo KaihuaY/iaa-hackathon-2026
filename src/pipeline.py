@@ -46,7 +46,7 @@ def _fit_predict(cfg, X, y, w, e, Xv, ev, yv=None, wv=None, n_iter=None, c=None,
     m = make(cfg["model"], params)
     if cfg["model"] in ("freqsev", "perperil"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter, counts=c, counts_val=cv_)
-    elif cfg["model"] in ("lgbm", "glmboost", "catboost", "xgb"):
+    elif cfg["model"] in ("lgbm", "glmboost", "catboost", "xgb", "nnboost"):
         m.fit(X, y, w, e, Xv if n_iter is None else None, yv, wv, ev, n_iter=n_iter)
     else:
         m.fit(X, y, w, e)
