@@ -421,3 +421,11 @@ EXPERIMENTS.update({
     "P28_capline": dict(desc="P20_135 with per-line cap: motor 98.5th pct, buildings/contents 99th", proposer="AI (round 6)", model="lgbm",
                         params=_P135, target=_T135, target_by_line={"motor": {"cap_q": 0.985}}, features=_F135),
 })
+
+# Round 6 follow-up blends on the candidate-elect X21 (CatBoost bag): + smooth-frequency freq×sev, + model-loaded LightGBM
+EXPERIMENTS.update({
+    "X24_blend5_f21": dict(desc="X21 plus F21 smooth-frequency freq×sev", proposer="AI (round 6)", model="blend", step=0.1,
+                           parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "F21_smoothfreq"]),
+    "X25_blend5_p27": dict(desc="X21 plus P27 model-loaded LightGBM", proposer="AI (round 6)", model="blend", step=0.1,
+                           parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P27_modelload"]),
+})
