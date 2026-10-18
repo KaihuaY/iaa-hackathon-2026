@@ -379,3 +379,20 @@ EXPERIMENTS.update({
                                    "patience": 4, "weight_decay": 1e-4, "tweedie_variance_power": 1.5, "seed": 7, "threads": 12},
                            target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
 })
+
+# ---- Round 6 (18 Oct, user: keep hunting) — cheap compute-only screens ----
+EXPERIMENTS.update({
+    "P26_cap985": dict(desc="P20_135 with cap at the 98.5th percentile (loading absorbs more tail)", proposer="AI (round 6)", model="lgbm",
+                       params=_P135, target={**_T135, "cap_q": 0.985}, features=_F135),
+    "P26_cap995": dict(desc="P20_135 with cap at the 99.5th percentile", proposer="AI (round 6)", model="lgbm",
+                       params=_P135, target={**_T135, "cap_q": 0.995}, features=_F135),
+    **{f"A1_s{sd}": dict(desc=f"A1 CatBoost with random_seed {sd}", proposer="AI (round 6, seed bag)", model="catboost",
+                         params={"random_seed": sd}, target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "drop": NOISE + ["make_model"]})
+       for sd in (101, 202)},
+    "A1_bag": dict(desc="A1 CatBoost averaged over 3 seeds", proposer="AI (round 6, seed bag)", model="blend", average=True,
+                   parts=["A1_catboost", "A1_s101", "A1_s202"]),
+    "X20_blend4_step05": dict(desc="X16 parts with a 0.05 blend grid", proposer="AI (round 6)", model="blend", step=0.05,
+                              parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo"]),
+    "X21_blend4_a1bag": dict(desc="X16 with the CatBoost seed bag", proposer="AI (round 6)", model="blend", step=0.1,
+                             parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo"]),
+})
