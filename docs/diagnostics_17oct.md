@@ -93,3 +93,19 @@ Seven consecutive ideas below +0.0002 nested: the stop rule is met twice over. T
 (bootstrap: better than every earlier candidate on 96–100 % of row subsets). What remains for Part 1 is the final
 pick (user decision on 22 Oct) and the deliverables; the one untested mechanism-backed idea is a model-based
 large-loss loading (expected ≤ +0.0002).
+
+## 9. Why are the leaders ahead? (18 Oct 23:45 UTC; leader 0.12996, us #4 0.12815, local X21 ≈ 0.1290 predicted)
+Checks run before deciding on a probe batch:
+
+| Hypothesis | Check | Result |
+|---|---|---|
+| Competitors use 2025 reported claims | claims file date range; claims joined to test policies | report dates end 2024-12-30; **0** claims with a 2025 loss date on test policies — nobody has future claims |
+| The 2025 buildings shortfall (probe ×1.093) is a trend-method artefact | 2025 factors from the premium index vs the claims-cost log-linear trend | buildings 1.054 vs 1.064 (1 % apart); motor 1.026 vs 0.991 (the claims trend points the *other* way from the ×1.029 probe) — not the explanation |
+| 2025 weather is out of the training range (trees cap, GLM clips) | test vs train range of every weather feature, by line | 0 % of 2025 rows above the training max; wind index mean 4.88 vs 4.35–4.60 by year but inside the range; response calibrated by quintile (§7) |
+| The leaders keep probing the public board | our probe history vs the leaders' continuing submissions | our only end-game jump (+0.0005) came from 4 probes; we stopped on 18 Oct; contents was never probed and buildings' optimum sits at the probed edge |
+
+Conclusion: the 2025 effect is a level shift observable only through the public board (possibly planted, possibly
+specific to the public subset); the remaining lever is a small probe batch — base X21, buildings ×1.09/×1.15,
+contents ×1.03/×1.06, then the calibrated candidate — approved by the user for 19 Oct. The private-LB caveat stands:
+the public-vs-private level gap (sd ≈ 0.005) is larger than any of these differences, so the final ranking will be
+decided largely by how the 2025 level transfers, which no one can observe before the close.
