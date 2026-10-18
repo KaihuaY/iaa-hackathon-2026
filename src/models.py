@@ -305,9 +305,15 @@ def make(kind: str, params: dict | None = None):
     return {"const": lambda: ConstRate(), "lgbm": lambda: LGBMTweedie(params),
             "glm": lambda: GLMTweedie(**(params or {})), "glmboost": lambda: GLMBoost(params),
             "freqsev": lambda: FreqSev(params), "perperil": lambda: PerPeril(params),
-            "catboost": lambda: _adv("CatBoostTweedie", params), "xgb": lambda: _adv("XGBTweedie", params)}[kind]()
+            "catboost": lambda: _adv("CatBoostTweedie", params), "xgb": lambda: _adv("XGBTweedie", params),
+            "nnboost": lambda: _nn("NNBoost", params)}[kind]()
 
 
 def _adv(name, params):
     import models_adv
     return getattr(models_adv, name)(params)
+
+
+def _nn(name, params):
+    import models_nn
+    return getattr(models_nn, name)(params)
