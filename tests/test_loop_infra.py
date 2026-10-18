@@ -139,3 +139,42 @@ def test_test_predictions_refuses_unsafe():
         pipeline.test_predictions(res)
     del res["unsafe"]
     assert len(pipeline.test_predictions(res)) == 2
+
+
+def test_recency_weights(monkeypatch):
+    sys.path.insert(0, str(ROOT / "src"))
+    import target
+    n = 40
+    year = np.repeat([2021, 2022, 2023, 2024], n // 4)
+    ps = pd.to_datetime(pd.Series(year).astype(str) + "-03-01")
+    pol = pd.DataFrame({"row_id": np.arange(n), "period_start": ps, "period_end": ps + pd.Timedelta(days=364),
+                        "exposure": 1.0, "written_premium": 100.0})
+    claims = pd.DataFrame({"line": pd.Series([], dtype=object), "row_id": pd.Series([], dtype=float),
+                           "claim_id": pd.Series([], dtype=object), "net_incurred": pd.Series([], dtype=float),
+                           "paid_to_date": pd.Series([], dtype=float), "status": pd.Series([], dtype=object),
+                           "loss_date": pd.Series([], dtype="datetime64[ns]")})
+    monkeypatch.setattr(target, "completeness_curve", lambda c, l: np.ones(10))
+    monkeypatch.setattr(target, "_daily", lambda curve: np.ones(4000))
+    monkeypatch.setattr(target, "_row_integral", lambda p, d: np.ones(len(p)))
+    monkeypatch.setattr(target, "_ibnr", lambda *a, **k: np.zeros(n))
+    monkeypatch.setattr(target, "trend_index", lambda *a, **k: {y: 1.0 for y in range(2021, 2025)})
+    base = {"weight_power": 1.0, "develop": False, "trend": "none"}
+    d0, _ = target.prepare_target(pol, pol, claims, "motor", base)
+    dk, _ = target.prepare_target(pol, pol, claims, "motor", {**base, "recency": 0.0})
+    d5, _ = target.prepare_target(pol, pol, claims, "motor", {**base, "recency": 0.5})
+    assert np.array_equal(d0.w.values, dk.w.values)
+    assert np.isclose(d5.w.mean(), d0.w.mean())
+    m = d5.w.groupby(year).mean()
+    assert m.is_monotonic_increasing and m.iloc[-1] > m.iloc[0]
+
+
+def test_exposure_feature_adds_one_column():
+    sys.path.insert(0, str(ROOT / "src"))
+    import features
+    tr = pd.DataFrame({"row_id": [1, 2, 3, 4], "year": 2021, "exposure": [1.0, 0.5, 0.25, 1.0], "a": [1., 2., 3., 4.]})
+    te = tr.copy()
+    X0, Xt0, c0 = features.model_matrix(tr, te, {"history": False})
+    X1, Xt1, c1 = features.model_matrix(tr, te, {"history": False, "exposure_feature": True})
+    assert list(X1.columns) == list(X0.columns) + ["expo_feat"] and list(Xt1.columns) == list(Xt0.columns) + ["expo_feat"]
+    assert X1[list(X0.columns)].equals(X0) and c0 == c1
+    assert np.allclose(X1["expo_feat"], tr["exposure"])

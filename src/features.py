@@ -201,6 +201,9 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
             for k, v in engineered_features(raw).items():
                 if k not in d.columns:
                     d[k] = v.values
+    if cfg.get("exposure_feature", False):                # row exposure (years) as a numeric feature
+        X["expo_feat"] = train["exposure"].astype("float32").values
+        Xt["expo_feat"] = test["exposure"].astype("float32").values
     cats = []
     for c in X.columns:
         if X[c].dtype == object or X[c].dtype == bool or str(X[c].dtype) == "category":
