@@ -199,6 +199,8 @@ EXPERIMENTS = {
                               proposer="AI (local loop, backlog #5)", model="glmboost",
                               params={"glm": {"n_bins": 20, "top": 60}}, target={**FULL_T, "cap_q": 0.99},
                               features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "X14_blend4_bags": dict(desc="4-way blend: B15, P20_135_bag corrected, F18_bag, A1 CatBoost", proposer="AI (local loop)",
+                            model="blend", step=0.1, parts=["B15_denoise_mm", "P20_135_bag_cred", "F18_bag", "A1_catboost"]),
     "D1_dart": dict(desc="P20_135 with DART boosting (drop 0.1, skip 0.5); early stopping is not available in dart",
                     proposer="AI (local loop, backlog #7)", model="lgbm",
                     params={**_P135, "boosting": "dart", "drop_rate": 0.1, "skip_drop": 0.5}, target=_T135, features=_F135),
