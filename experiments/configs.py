@@ -238,6 +238,16 @@ EXPERIMENTS = {
                                    target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
     "X16_blend4_noexpo": dict(desc="4-way blend: P20_135_bag_cred, F18_bag, A1 CatBoost, B20 smooth-boost (time-shift robust)", proposer="AI (non-linear hunt)",
                               model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_smoothboost_noexpo"]),
+    # B20's boost stage stops early at very different rounds per fold (18-178): seed-bag it (the GLM base is deterministic)
+    **{f"B20_s{sd}": dict(desc=f"B20 with boost seed {sd}", proposer="AI (non-linear hunt, seed bag)", model="glmboost",
+                          params={"glm": {"mode": "smooth", "alpha": 1e-4, "interactions": [("sum_insured","flood_zone"),("driver_age","cover_type"),("ncb_years","driver_age"),("annual_mileage","vehicle_value_group"),("sum_insured","property_age")]},
+                                  **TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35, "seed": sd},
+                          target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS})
+       for sd in (101, 202)},
+    "B20_bag": dict(desc="B20 averaged over 3 boost seeds", proposer="AI (non-linear hunt, seed bag)", model="blend", average=True,
+                    parts=["B20_smoothboost_noexpo", "B20_s101", "B20_s202"]),
+    "X17_blend4_b20bag": dict(desc="X16 with the B20 seed bag", proposer="AI (non-linear hunt)",
+                              model="blend", step=0.1, parts=["P20_135_bag_cred", "F18_bag", "A1_catboost", "B20_bag"]),
     "G15_glm_peril": dict(desc="G14 smooth GLM plus physical peril interactions (soil x dry summer, flood x rainfall, wind x roof, freezing x property age, hail x parking, flood x basement)",
                           proposer="AI (non-linear hunt: GLM lacks peril interactions on buildings)", model="glm",
                           params={"mode": "smooth", "alpha": 1e-4, "interactions": [
