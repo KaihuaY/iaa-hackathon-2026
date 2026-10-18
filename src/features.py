@@ -129,6 +129,43 @@ def build_base(refresh: bool = False) -> dict:
     return out
 
 
+ENGINEERED = ["age_at_licence", "ncb_ratio", "mileage_per_cc", "value_per_age", "points_per_year",
+              "si_per_bedroom", "si_per_age", "river_x_flood", "elev_x_flood",
+              "tenure_ratio", "prior_rate", "hist_rate"]
+
+
+def engineered_features(df: pd.DataFrame) -> dict:
+    """Ratios/differences of raw columns (float32, NaN if any input is NaN); only those whose inputs exist."""
+    f = lambda c: pd.to_numeric(df[c], errors="coerce").astype("float64")
+    has = lambda *cs: all(c in df.columns for c in cs)
+    out = {}
+    if has("driver_age", "years_licensed"):
+        out["age_at_licence"] = f("driver_age") - f("years_licensed")
+    if has("ncb_years", "years_licensed"):
+        out["ncb_ratio"] = f("ncb_years") / (f("years_licensed") + 1)
+    if has("annual_mileage", "engine_size_cc"):
+        out["mileage_per_cc"] = f("annual_mileage") / (f("engine_size_cc") + 1)
+    if has("vehicle_value_group", "vehicle_age"):
+        out["value_per_age"] = f("vehicle_value_group") / (f("vehicle_age") + 1)
+    if has("licence_points", "years_licensed"):
+        out["points_per_year"] = f("licence_points") / (f("years_licensed") + 1)
+    if has("sum_insured", "bedrooms"):
+        out["si_per_bedroom"] = f("sum_insured") / (f("bedrooms") + 1)
+    if has("sum_insured", "property_age"):
+        out["si_per_age"] = f("sum_insured") / (f("property_age") + 1)
+    if has("flood_zone", "distance_to_river_km"):
+        out["river_x_flood"] = f("flood_zone") * (1 / (f("distance_to_river_km") + 0.1))
+    if has("flood_zone", "elevation_m"):
+        out["elev_x_flood"] = f("flood_zone") / (f("elevation_m") + 1)
+    if has("customer_tenure", "customer_age"):
+        out["tenure_ratio"] = f("customer_tenure") / (f("customer_age") - 17).clip(lower=1)
+    if has("prior_claims_5y"):
+        out["prior_rate"] = f("prior_claims_5y") / 5
+    if has("pol_claims", "pol_expo"):
+        out["hist_rate"] = f("pol_claims") / (f("pol_expo") + 0.5)
+    return {k: v.astype("float32") for k, v in out.items()}
+
+
 def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame, list]:
     """Feature frames (same columns, shared category levels) for one line."""
     spec = get_spec()
@@ -159,6 +196,11 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     for d in (X, Xt):                                     # halve memory: float64 -> float32
         f64 = d.select_dtypes("float64").columns
         d[f64] = d[f64].astype("float32")
+    if cfg.get("engineered", False):
+        for d, raw in ((X, train), (Xt, test)):
+            for k, v in engineered_features(raw).items():
+                if k not in d.columns:
+                    d[k] = v.values
     cats = []
     for c in X.columns:
         if X[c].dtype == object or X[c].dtype == bool or str(X[c].dtype) == "category":

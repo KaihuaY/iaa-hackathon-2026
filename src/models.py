@@ -66,10 +66,19 @@ class LGBMTweedie:
 class GLMTweedie:
     """Tweedie GLM (glum) on banded numerics and grouped categoricals, log(exposure) offset."""
 
-    def __init__(self, alpha=1e-4, n_bins=10, top=30):
+    def __init__(self, alpha=1e-4, n_bins=10, top=30, mode="bands", interactions=None):
+        assert mode in ("bands", "smooth"), mode
         self.alpha, self.n_bins, self.top = alpha, n_bins, top
+        self.mode = mode
+        self.interactions = [tuple(p) for p in (interactions or [])]
+
+    def _cat_col(self, s, keep):
+        v = s.astype(str).where(s.astype(str).isin(keep), "_other").where(s.notna(), "_missing")
+        return pd.Categorical(v, categories=keep + ["_other", "_missing"])
 
     def _design(self, X, fit):
+        if self.mode == "smooth":
+            return self._design_smooth(X, fit)
         out = pd.DataFrame(index=X.index)
         if fit:
             self.spec = {}
@@ -80,8 +89,7 @@ class GLMTweedie:
                     keep = s.value_counts().index[: self.top].astype(str).tolist()
                     self.spec[c] = ("cat", keep)
                 keep = self.spec[c][1]
-                v = s.astype(str).where(s.astype(str).isin(keep), "_other").where(s.notna(), "_missing")
-                out[c] = pd.Categorical(v, categories=keep + ["_other", "_missing"])
+                out[c] = self._cat_col(s, keep)
             else:
                 if fit:
                     edges = np.unique(np.nanquantile(s.astype(float), np.linspace(0, 1, self.n_bins + 1)))
@@ -94,6 +102,51 @@ class GLMTweedie:
                 out[c] = pd.Categorical(lab, categories=[str(i) for i in range(len(edges) - 1)] + ["_missing"])
         return out
 
+    def _design_smooth(self, X, fit):
+        """Per numeric: standardised log1p(x-min) and its square (+ missing indicator, mean-filled); categoricals as
+        in bands mode; interactions: num x num = product of log1p terms, num x cat = log1p term x each one-hot level."""
+        if fit:
+            self.spec, self.stats = {}, {}
+        out, raw = {}, {}
+
+        def std(name, v, key):
+            if fit:
+                mu, sd = float(np.mean(v)), float(np.std(v))
+                self.stats[key] = (mu, sd if sd > 1e-12 else 1.0)
+            mu, sd = self.stats[key]
+            out[name] = ((v - mu) / sd).astype("float64")
+
+        for c in X.columns:
+            s = X[c]
+            if isinstance(s.dtype, pd.CategoricalDtype):
+                if fit:
+                    self.spec[c] = ("cat", s.value_counts().index[: self.top].astype(str).tolist())
+                out[c] = self._cat_col(s, self.spec[c][1])
+            else:
+                x = s.astype(float).to_numpy()
+                nan = np.isnan(x)
+                if fit:
+                    mn = float(np.nanmin(x)) if (~nan).any() else 0.0
+                    fill = float(np.mean(np.log1p(np.clip(x[~nan] - mn, 0, None)))) if (~nan).any() else 0.0
+                    self.spec[c] = ("num", mn, bool(nan.any()), fill)
+                _, mn, has_nan, fill = self.spec[c]
+                t = np.where(nan, fill, np.log1p(np.clip(np.where(nan, mn, x) - mn, 0, None)))
+                raw[c] = t
+                std(f"{c}__l", t, f"{c}__l")
+                std(f"{c}__l2", t ** 2, f"{c}__l2")
+                if has_nan:
+                    out[f"{c}__na"] = nan.astype("float64")
+        for a, b in self.interactions:
+            if a not in raw:
+                continue
+            if b in raw:
+                std(f"{a}*{b}", raw[a] * raw[b], f"{a}*{b}")
+            elif b in self.spec and self.spec[b][0] == "cat":
+                lab = np.asarray(out[b].astype(str))
+                for lvl in list(self.spec[b][1]) + ["_other", "_missing"]:
+                    std(f"{a}*{b}={lvl}", raw[a] * (lab == lvl), f"{a}*{b}={lvl}")
+        return pd.DataFrame(out, index=X.index)
+
     def fit(self, X, y, w, expo, **_):
         from glum import GeneralizedLinearRegressor, TweedieDistribution
         Z = self._design(X, fit=True)
@@ -104,7 +157,10 @@ class GLMTweedie:
         return self
 
     def predict(self, X, expo):
-        Z = self._design(X, fit=False)[self.cols]
+        Z = self._design(X, fit=False)
+        assert set(self.cols) <= set(Z.columns), "predict design is missing fit columns"
+        Z = Z[self.cols]
+        assert list(Z.columns) == list(self.cols)
         return self.model.predict(Z, offset=np.log(expo))
 
 
