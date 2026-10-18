@@ -3,8 +3,8 @@
 DECISIONS = [
     {
         "id": "final_rule", "impact": "High", "multi": False,
-        "title": "How to choose the final submission (23 Oct)",
-        "why": "Only one file is judged, on the private leaderboard (rows we never see). Current public LB: X10_levelcal 0.12797, "
+        "title": "How to choose the final submission (round 3, 17 Oct; superseded by the round-4 card below)",
+        "why": "Only one file is judged, on the private leaderboard (rows we never see). Public LB at the time: X10_levelcal 0.12797 (option A was taken: FINAL_avg3_levelcal 0.12815, submitted 17 Oct), "
                "X10 unscaled 0.12749.",
         "options": [
             {"key": "A", "label": "Average of the top-3 candidates, with the LB-calibrated level factors applied",

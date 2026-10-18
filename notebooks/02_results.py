@@ -307,3 +307,24 @@ import decisions_round2
 importlib.reload(decisions_round2)
 html = board.render_board(decisions_round2.DECISIONS).replace("iaa-decision-board-v1", "iaa-decision-board-round3")
 HTML(html)
+
+# %% [markdown]
+# ## 9 · Non-linear hunt and novel techniques, 18 Oct
+# All numbers are local nested 5-fold CV (Tweedie D²). **No Kaggle submissions since 17 Oct.** Leaderboard now: #1 0.12908, #2 0.12893,
+# #3 0.12855, us #4 0.12815 (FINAL_avg3_levelcal, submitted 17 Oct). Local candidate X16 is predicted at about 0.1290 ± 0.002 with level
+# factors; written to `submissions/20261018_1300_FINAL_part1.csv`, **not uploaded**.
+#
+# - **Smooth log-link GLM** (power-law / squared log terms, log-product interactions): quick 0.1608 → 0.1620 with engineered ratios; banded GLM 0.1522 (full CV).
+# - **Review 3 caught an extrapolation blow-up** (2023 holdout −0.66, test mean 24,016 vs ~400) → winsorise, clip, bound, plus an automatic "unsafe" guard (test pure premium per exposure outside 0.5–2× OOF cannot blend or be submitted).
+# - **Review 4: holdout still −0.59.** Cumulative-exposure counters are calendar-time proxies (mean 0.00 / 1.67 / 2.99 / 2.95 in 2021–24); dropped → holdout +0.108. Test set verified in range.
+# - **Accepted B20** (smooth GLM base + LightGBM residual): CV 0.1574, holdout +0.097; blend X16 nested 0.1597 vs 0.1593; B20 weights 0.16 / 0.38 / 0.39 motor / buildings / contents.
+# - **Private-LB bootstrap:** X16 beats X12 / X14 / X10 / X11 with P 0.96–1.00 on 30 % subsets (paired sd 0.0002); k = 1 best.
+# - **No gain:** G15 peril interactions (0.1622 vs 0.1620), B20 seed bag (X17 0.1597), B21 smooth + CatBoost (0.1572, X18 0.1597), smooth-GLM grid G16–G19 (0.1621–0.1622), recency weights (0.1635 / 0.1634 vs 0.1639), exposure feature (0.1636), neural residual N1 (0.1623, early stop at epoch 1–2; retune N2 pending).
+# - **In progress:** pooled home-lines model (P25 / B23), NN retune (N2), covariate-shift importance weights (P24, judged on the 2023 holdout only).
+
+# %%
+import decisions_round4
+importlib.reload(decisions_round4)
+html4 = (board.render_board(decisions_round4.DECISIONS).replace("iaa-decision-board-v1", "iaa-decision-board-round4")
+         .replace("dboard", "dboard4"))
+HTML(html4)
