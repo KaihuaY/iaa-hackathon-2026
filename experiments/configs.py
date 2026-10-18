@@ -434,3 +434,11 @@ EXPERIMENTS.update({
     "X26_blend5_p28": dict(desc="X21 plus P28 per-line-cap LightGBM", proposer="AI (round 6)", model="blend", step=0.1,
                            parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P28_capline"]),
 })
+
+# User decision 18 Oct 23:10 UTC: written_premium allowed as a BLEND PART only (one model carries it; nested weight)
+EXPERIMENTS.update({
+    "P29_wp": dict(desc="P20_135 plus written_premium (blend-part-only use of the incumbent price)", proposer="AI (round 6, user-approved scope)",
+                   model="lgbm", params=_P135, target=_T135, features={**_F135, "premium": True}),
+    "X27_blend6_wp": dict(desc="X21 parts plus the written-premium model as a blend part", proposer="AI (round 6)", model="blend", step=0.1,
+                          parts=["P20_135_bag_cred", "F18_bag", "A1_bag", "B20_smoothboost_noexpo", "P29_wp"]),
+})
