@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from models import LGBMTweedie  # noqa: E402
+from models import GLMBoost, LGBMTweedie  # noqa: E402
+from models_adv import CatBoostTweedie  # noqa: E402
 
 
 def _data(n=20000, seed=0):
@@ -31,3 +32,28 @@ def test_unconstrained_fits():
     m = LGBMTweedie({"learning_rate": 0.1, "min_data_in_leaf": 200}).fit(X, y, w, expo, n_iter=50)
     p = m.predict(X, expo)
     assert m.monotone == {} and np.all(np.isfinite(p)) and np.all(p > 0)
+
+
+_CB = {"learning_rate": 0.1, "depth": 3, "min_data_in_leaf": 200, "thread_count": 2}
+
+
+def test_catboost_margin_equivalence():
+    X, y, w, expo = _data(5000)
+    base = CatBoostTweedie(dict(_CB)).fit(X, y, w, expo, n_iter=30)
+    p0 = base.predict(X, expo)
+    flat = base.base + np.log(expo)
+    m = CatBoostTweedie(dict(_CB)).fit(X, y, w, expo, n_iter=30, margin=flat)
+    assert np.allclose(m.predict(X, expo, margin=flat), p0)
+    other = flat + 0.5 * X["a"].to_numpy()
+    m2 = CatBoostTweedie(dict(_CB)).fit(X, y, w, expo, n_iter=30, margin=other)
+    p2 = m2.predict(X, expo, margin=other)
+    assert not np.allclose(p2, p0) and np.all(p2 > 0)
+
+
+def test_glmboost_catboost():
+    X, y, w, expo = _data(5000)
+    m = GLMBoost({"boost": "catboost", "glm": {"mode": "smooth", "alpha": 1e-3}, **_CB}).fit(X, y, w, expo, n_iter=30)
+    p = m.predict(X, expo)
+    assert isinstance(m.gbm, CatBoostTweedie) and "boost" not in m.gbm.params
+    assert np.all(np.isfinite(p)) and np.all(p > 0)
+    assert abs(p.sum() / y.sum() - 1) < 0.05

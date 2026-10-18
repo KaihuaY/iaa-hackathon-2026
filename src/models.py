@@ -276,7 +276,15 @@ class GLMBoost:
     def __init__(self, params=None):
         params = dict(params or {})
         self.glm = GLMTweedie(**params.pop("glm", {}))
-        self.gbm = LGBMTweedie(params)
+        boost = params.pop("boost", "lgbm")
+        if boost == "catboost":
+            kw = {k: params.pop(k) for k in ("rounds", "early_stop") if k in params}
+            self.gbm = _adv("CatBoostTweedie", params)
+            self.gbm.__dict__.update(kw)
+        elif boost == "lgbm":
+            self.gbm = LGBMTweedie(params)
+        else:
+            raise ValueError(f"unknown boost stage {boost!r}")
 
     def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None):
         self.glm.fit(X, y, w, expo)

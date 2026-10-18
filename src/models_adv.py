@@ -39,12 +39,13 @@ class CatBoostTweedie:
         from catboost import Pool
         return Pool(self._prep(X), y, weight=w, baseline=margin, cat_features=_cat_cols(X))
 
-    def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None):
+    def fit(self, X, y, w, expo, X_val=None, y_val=None, w_val=None, expo_val=None, n_iter=None,
+            margin=None, margin_val=None):
         from catboost import CatBoostRegressor
         self.base = float(np.log(np.sum(w * y) / np.sum(w * expo)))
-        tr = self._pool(X, y, w, self.base + np.log(expo))
+        tr = self._pool(X, y, w, self._start(expo, margin))
         if X_val is not None and n_iter is None:
-            va = self._pool(X_val, y_val, w_val, self.base + np.log(expo_val))
+            va = self._pool(X_val, y_val, w_val, self._start(expo_val, margin_val))
             self.model = CatBoostRegressor(iterations=self.rounds, od_type="Iter", od_wait=self.early_stop,
                                          **self.params, **self._mono_params(X))
             self.model.fit(tr, eval_set=va, use_best_model=True)
@@ -54,13 +55,17 @@ class CatBoostTweedie:
             self.model.fit(tr)
             self.best_iter = n_iter or 1000
         self.scale = 1.0
-        self.scale = float(np.sum(w * y) / np.sum(w * self.predict(X, expo)))
+        self.scale = float(np.sum(w * y) / np.sum(w * self.predict(X, expo, margin)))
         return self
 
-    def predict(self, X, expo):
+    def _start(self, expo, margin):
+        # `margin` (log of a base prediction, e.g. a GLM) replaces the flat start when given.
+        return margin if margin is not None else self.base + np.log(expo)
+
+    def predict(self, X, expo, margin=None):
         from catboost import Pool
         raw = self.model.predict(Pool(self._prep(X), cat_features=_cat_cols(X)), prediction_type="RawFormulaVal")
-        return self.scale * np.exp(raw + self.base + np.log(expo))
+        return self.scale * np.exp(raw + self._start(expo, margin))
 
     def importance(self):
         return pd.Series(self.model.get_feature_importance(), index=self.model.feature_names_).sort_values(ascending=False)
