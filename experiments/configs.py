@@ -370,3 +370,12 @@ EXPERIMENTS.update({
     "B23_pool_home_smooth": {**EXPERIMENTS["B20_smoothboost_noexpo"], "pool": ["buildings", "contents"],
                              "desc": "B20 smooth-boost fitted once on buildings+contents pooled (line_id one-hot)"},
 })
+
+# N1 overfit within 1-2 epochs (val deviance rose immediately): smaller, slower, more regularised retune before judging D1
+EXPERIMENTS.update({
+    "N2_nnboost_reg": dict(desc="N1 retune: hidden 64, dropout 0.3, lr 3e-4, batch 8192, weight decay 1e-4, patience 4",
+                           proposer="AI (novel techniques track, CANN pattern)", model="nnboost",
+                           params={"glm": _SMOOTH_GLM, "hidden": 64, "dropout": 0.3, "lr": 3e-4, "batch": 8192, "epochs": 30,
+                                   "patience": 4, "weight_decay": 1e-4, "tweedie_variance_power": 1.5, "seed": 7, "threads": 12},
+                           target={**FULL_T, "cap_q": 0.99}, features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+})
