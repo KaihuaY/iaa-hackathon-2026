@@ -77,7 +77,7 @@ def main():
     sub = pipeline.test_predictions(res)
     L = res["lines"][a.line]
     rid = pd.Index(L["test_row_id"])
-    mask = segment_mask(te.loc[rid].reset_index(), a.segment)
+    mask = segment_mask(te.loc[rid].rename_axis("row_id").reset_index(), a.segment)   # keep row_id as a column
     if mask.sum() == 0 or mask.all():
         raise SystemExit(f"segment {a.segment} selects {mask.sum()} of {len(mask)} rows - nothing to probe")
     scaled_ids = set(rid[mask])
