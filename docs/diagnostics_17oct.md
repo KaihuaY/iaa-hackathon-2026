@@ -144,3 +144,22 @@ motor=1.029 --band-line buildings --band-col sum_insured --band-factors 1.0 1.05
 correlation 0.994). Expected public ≈ 0.1284. The user approved one or two submissions on 20 Oct for this candidate
 only (no more mapping probes); the top-quartile factor is hedged below the parabola optimum because the effect may be
 weaker on the private rows. Scheduled for 20 Oct 00:03 UTC.
+
+### 10d. How much of a segment factor measured on the public rows is noise? (19 Oct 12:00 UTC, debate check)
+Closed-form Tweedie-optimal multiplier s = Σ y·μ^−0.5 / Σ μ^0.5 of X21's OOF predictions, on 300 public-sized
+random samples (20 % of the line's test size) of the 2023 and 2024 rows:
+
+| Segment | sampling SD of s | full-year s, 2023 → 2024 |
+|---|---|---|
+| buildings SI Q0 / Q3 | 0.100–0.105 / 0.116–0.130 | 0.860 → 1.045 / 0.994 → 1.032 |
+| buildings top SI decile | 0.165–0.213 | 1.094 → 0.945 |
+| buildings whole line | 0.054–0.059 | 0.971 → 0.998 |
+| contents SI Q0 / Q3 / top decile / line | 0.07–0.10 / 0.10–0.14 / 0.16–0.29 / 0.05–0.06 | — |
+
+Reading: the public board's "Q3 wants ×1.22" is ≈1.7 SD of pure sampling noise, and even whole-year segment
+optima swing 15–20 % between adjacent years (large losses). Segment factors fitted on the public rows are mostly
+not expected to transfer to the private rows; line-level factors are twice as precise. SI indexation is uniform
+(+3 %/yr buildings, +2 %/yr contents, identical across quartiles and years), so the public tilt is not an
+exposure-base artefact. Implication for the final: credibility-shrink probe-derived segment tilts
+(Z = τ²/(τ²+σ²) with τ ≈ 0.05 from the OOF SI miscalibration and σ ≈ 0.12 → Z ≈ 0.15), keep the line levels, and
+prefer the model-driven tilt (X30's SI offset) over the board-fitted one for the file ticked as final.
