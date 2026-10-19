@@ -163,3 +163,15 @@ not expected to transfer to the private rows; line-level factors are twice as pr
 exposure-base artefact. Implication for the final: credibility-shrink probe-derived segment tilts
 (Z = τ²/(τ²+σ²) with τ ≈ 0.05 from the OOF SI miscalibration and σ ≈ 0.12 → Z ≈ 0.15), keep the line levels, and
 prefer the model-driven tilt (X30's SI offset) over the board-fitted one for the file ticked as final.
+
+### 10f. Combining every saved experiment (19 Oct evening, user request)
+Pool: 80 single models and equal-weight seed bags (weighted blends excluded — their saved OOF weights were fitted
+in-sample, which inflated a first run to +0.0008). Nested CV, GroupKFold(5) by policy, X21 reproduced exactly.
+| Combiner | overall nested D² | vs X21 (0.15975) | P(better) on 25 % subsets |
+|---|---|---|---|
+| greedy ensemble selection | 0.15984 | +0.00009 | 0.69 |
+| penalised optimised weights | 0.15898 | −0.00075 | 0.01 |
+| geometric optimised weights | 0.15895 | −0.00077 | 0.00 |
+Reading: no combination of what we have beats the 4-part blend; free weight optimisation over 80 near-identical
+parts overfits. Together with the public-score fit (docs/lb_response_fit.md) this closes "combine the submissions":
+the best view is X21/X30 plus credibility-shrunk level/tilt factors. The written file GB_grand_blend.csv is not used.
