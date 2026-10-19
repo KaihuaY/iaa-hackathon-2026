@@ -535,3 +535,7 @@ EXPERIMENTS.update({
     "T4_cap995_p17": dict(desc="cap 99.5th pct + power 1.7 + segment loading", proposer="user (tail test)", model="lgbm",
                           params={**_P135, "tweedie_variance_power": 1.7}, target={**_T135, "cap_q": 0.995}, features=_F135),
 })
+EXPERIMENTS.update({
+    "T5_motor_p17": dict(desc="P20_135 with Tweedie power 1.7 on motor only (quick: motor +0.0007), 1.35 elsewhere", proposer="user (tail test)", model="lgbm",
+                         params=_P135, params_by_line={"motor": {**_P135, "tweedie_variance_power": 1.7}}, target=_T135, features=_F135),
+})
