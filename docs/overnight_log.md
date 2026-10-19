@@ -11,3 +11,4 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 | 03:15 | X28 (low-lr part) running, X29 queued | gate 0.1600 |
 | 03:40 | O2 line-wise composite (motor/contents X21 + buildings X30): overall ≈ +0.0001 (buildings +0.0003 nested × deviance share) | no separate candidate; X30_sifix already carries it; X31 (bagged SI family) queued after X29 |
 | 03:40 | Overnight heartbeat cron d476819e armed (hourly); probe-design script extension in progress (agent) | — |
+| 03:55 | O6 probe designs ready (files written, not uploaded): contents SI top quartile x1.10 (25 %), buildings SI top decile x1.30 (10 %), buildings top-SI & top-wind x1.30 (6.6 %), motor vehicle_value_group 18-20 x1.06 (3.9 % - too small to resolve; use groups 15-20, ~18 %, when launched) | awaiting the user's morning go-ahead (4/day approved) |
