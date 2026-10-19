@@ -13,3 +13,4 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 | 03:40 | Overnight heartbeat cron d476819e armed (hourly); probe-design script extension in progress (agent) | — |
 | 03:55 | O6 probe designs ready (files written, not uploaded): contents SI top quartile x1.10 (25 %), buildings SI top decile x1.30 (10 %), buildings top-SI & top-wind x1.30 (6.6 %), motor vehicle_value_group 18-20 x1.06 (3.9 % - too small to resolve; use groups 15-20, ~18 %, when launched) | awaiting the user's morning go-ahead (4/day approved) |
 | 03:45 | Heartbeat: X28 blend still on its 5-part grid (1.4 h), X29 queued; nothing finished. O3 chain launched alongside (P34_b07 seeds -> bag, A9_b07 seeds -> bag, X31) | gate for X31: nested >= 0.1600 |
+| 04:45 | X28 (low-lr part) nested 0.1597 -> rejected; P34_b07 seed bag 0.1586 (+0.0003 on the part); A9_b07_s101 0.1582. Running: X29 blend, A9_b07_s202 (then A9 bag, X31) | no launch (two jobs running) |
