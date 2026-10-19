@@ -134,3 +134,13 @@ homes slightly over-priced. The blend's own OOF shows the same pattern in traini
 flatten the top of the SI response) and the 2025 test has ~7 % higher SI (indexation), which turns a shape error into
 a level shift. Fixes under test: sum insured in the exposure offset (P33/B26, elasticity k) and a nested SI-decile
 calibration of the blend (`scripts/recalibrate.py --by sum_insured`).
+
+### 10c. Decision and candidate (19 Oct 00:35 UTC)
+Nested SI-decile calibration of X21 fitted on the training years gains +0.00003 (g 0.93 → 1.04 across SI), i.e. the
+training data does not contain the 2025 high-SI shift the public rows show (top quartile wants ≈ ×1.22). The fix is
+therefore probe-derived, not model-derived: `scripts/segment_calibrate.py X21_blend4_a1bag --level-factors
+motor=1.029 --band-line buildings --band-col sum_insured --band-factors 1.0 1.05 1.08 1.20` →
+`submissions/20261018_2021_X21_blend4_a1bag_sifix.csv` (buildings mean factor 1.0825; +0.5 % vs the submitted final;
+correlation 0.994). Expected public ≈ 0.1284. The user approved one or two submissions on 20 Oct for this candidate
+only (no more mapping probes); the top-quartile factor is hedged below the parabola optimum because the effect may be
+weaker on the private rows. Scheduled for 20 Oct 00:03 UTC.
