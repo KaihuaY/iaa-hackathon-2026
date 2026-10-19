@@ -119,3 +119,18 @@ decided largely by how the 2025 level transfers, which no one can observe before
 Implication: a calibrated X21 would score ≈0.1280, below the submitted FINAL_avg3_levelcal (0.12815); line-level
 calibration is exhausted; the leaders' +0.002 is structure the public rows reward and our CV cannot see. Next:
 segment probes (motor new business, motor full-year exposure shape, buildings SI top/bottom quartile).
+
+### 10b. Segment probes on the X21 base (19 Oct; base 0.12744; 5 submissions)
+| Segment scaled | Share of line | LB | Δ vs base |
+|---|---|---|---|
+| motor new business ×1.06 | 15 % | 0.12744 | 0 |
+| motor full-year exposure rows ×1.04 | 59 % | 0.12751 | +0.00007 (same as the flat motor curve → no exposure-shape effect) |
+| buildings SI top quartile ×1.08 | 25 % | 0.12785 | +0.00041 (= the entire flat ×1.09 gain, with a third of the level change) |
+| buildings SI top quartile ×1.16 | 25 % | 0.12808 | +0.00064 — parabola optimum ≈ ×1.22, gain ≈ +0.0007 |
+| buildings SI bottom quartile ×1.08 | 25 % | 0.12734 | −0.00010 |
+Reading: the 2025 buildings shift is a **sum-insured structure**, not a level — high-SI homes are under-priced, low-SI
+homes slightly over-priced. The blend's own OOF shows the same pattern in training (actual/pred by SI decile 0.91 …
+1.11; contents 0.97 … 1.05), i.e. the models under-respond to sum insured (monotone constraints + heavy regularisation
+flatten the top of the SI response) and the 2025 test has ~7 % higher SI (indexation), which turns a shape error into
+a level shift. Fixes under test: sum insured in the exposure offset (P33/B26, elasticity k) and a nested SI-decile
+calibration of the blend (`scripts/recalibrate.py --by sum_insured`).

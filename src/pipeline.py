@@ -100,25 +100,41 @@ def _units(cfg, spec):
     return out
 
 
+def _offset_exposure(tr, te, tcfg):
+    """Exposure for the log offset. target cfg `si_offset_power` k > 0 multiplies it by (sum_insured / train median)^k so
+    the model prices per unit of sum insured (elasticity k) and the trees learn deviations; k = 0 (default) = plain exposure.
+    Probe evidence 19 Oct: the 2025 buildings shift is concentrated in high-SI homes and the OOF under-predicts the top SI decile."""
+    k = float(tcfg.get("si_offset_power", 0.0) or 0.0)
+    e_tr, e_te = tr.exposure.values.astype(float), te.exposure.values.astype(float)
+    if k == 0.0 or "sum_insured" not in tr:
+        return e_tr, e_te
+    ref = float(np.nanmedian(tr.sum_insured.astype(float)))
+    f_tr = (tr.sum_insured.astype(float).fillna(ref).values / ref) ** k
+    f_te = (te.sum_insured.astype(float).fillna(ref).values / ref) ** k
+    return e_tr * f_tr, e_te * f_te
+
+
 def _load_unit(base, lines, cfg, spec):
     """Per-line data via _line_data (targets/weights/loadings untouched); for a pooled unit also the stacked arrays."""
     parts = []
     for line in lines:
         tr, te, tgt, info, X, Xt = _line_data(base, line, cfg)
+        tcfg = {**cfg.get("target", {}), **cfg.get("target_by_line", {}).get(line, {})}
+        e_tr, e_te = _offset_exposure(tr, te, tcfg)
         parts.append({"line": line, "tr": tr, "te": te, "tgt": tgt, "info": info, "X": X, "Xt": Xt,
-                      "y": tgt.y_train.values, "w": tgt.w.values, "e": tr.exposure.values,
+                      "y": tgt.y_train.values, "w": tgt.w.values, "e": e_tr, "te_e": e_te,
                       "c": _aux(cfg, base, line, tr, tgt, info),
                       "load": info["loading"] if cfg.get("target", {}).get("cap_q") else 1.0})
     if len(parts) == 1:
         p = parts[0]
         U = {k: p[k] for k in ("X", "Xt", "y", "w", "e", "c")}
-        U["g"], U["yr"], U["te_e"], U["fit_line"] = p["tr"][spec.group_col], p["tr"].period_start.dt.year.values, p["te"].exposure.values, p["line"]
+        U["g"], U["yr"], U["te_e"], U["fit_line"] = p["tr"][spec.group_col], p["tr"].period_start.dt.year.values, p["te_e"], p["line"]
     else:
         U = {k: np.concatenate([p[k] for p in parts]) for k in ("y", "w", "e", "c")}
         U["X"], U["Xt"] = _concat_frames([p["X"] for p in parts], [p["Xt"] for p in parts], lines)
         U["g"] = np.concatenate([p["tr"][spec.group_col].values for p in parts])
         U["yr"] = np.concatenate([p["tr"].period_start.dt.year.values for p in parts])
-        U["te_e"] = np.concatenate([p["te"].exposure.values for p in parts])
+        U["te_e"] = np.concatenate([p["te_e"] for p in parts])
         U["fit_line"] = None
     U["parts"] = parts
     U["n"] = np.cumsum([0] + [len(p["tr"]) for p in parts])

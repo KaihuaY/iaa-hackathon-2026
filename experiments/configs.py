@@ -460,3 +460,16 @@ EXPERIMENTS.update({
     "P32_mileage": dict(desc="P20_135 with annual_mileage 0 -> NaN + missing indicator", proposer="AI (data audit 19 Oct)", model="lgbm",
                         params=_P135, target=_T135, features={**_F135, "mileage_zero_nan": True}),
 })
+
+# 19 Oct probes: the 2025 buildings shift sits in high-SI homes; OOF under-predicts the top SI decile (1.11) and
+# over-predicts the bottom (0.91). Price per unit of sum insured via the offset (elasticity k) on the home lines.
+EXPERIMENTS.update({
+    "P33_si1": dict(desc="P20_135 with sum_insured^1.0 in the offset on buildings/contents", proposer="AI (probe evidence 19 Oct)", model="lgbm",
+                    params=_P135, target=_T135, target_by_line={"buildings": {"si_offset_power": 1.0}, "contents": {"si_offset_power": 1.0}}, features=_F135),
+    "P33_si05": dict(desc="P20_135 with sum_insured^0.5 in the offset on buildings/contents", proposer="AI (probe evidence 19 Oct)", model="lgbm",
+                     params=_P135, target=_T135, target_by_line={"buildings": {"si_offset_power": 0.5}, "contents": {"si_offset_power": 0.5}}, features=_F135),
+    "B26_si1_smooth": dict(desc="B20 smooth-boost with sum_insured^1.0 in the offset on the home lines", proposer="AI (probe evidence 19 Oct)", model="glmboost",
+                           params={"glm": _SMOOTH_GLM, **TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35},
+                           target={**FULL_T, "cap_q": 0.99}, target_by_line={"buildings": {"si_offset_power": 1.0}, "contents": {"si_offset_power": 1.0}},
+                           features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+})
