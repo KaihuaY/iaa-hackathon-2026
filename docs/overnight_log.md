@@ -9,3 +9,5 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 |---|---|---|
 | 03:15 | X25 (X21 parts + model-based loading P27) nested 0.1597 | rejected (< X21 0.1598); chain round-6c closed |
 | 03:15 | X28 (low-lr part) running, X29 queued | gate 0.1600 |
+| 03:40 | O2 line-wise composite (motor/contents X21 + buildings X30): overall ≈ +0.0001 (buildings +0.0003 nested × deviance share) | no separate candidate; X30_sifix already carries it; X31 (bagged SI family) queued after X29 |
+| 03:40 | Overnight heartbeat cron d476819e armed (hourly); probe-design script extension in progress (agent) | — |
