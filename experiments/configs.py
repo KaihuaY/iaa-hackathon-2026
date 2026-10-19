@@ -495,3 +495,17 @@ EXPERIMENTS.update({
     "X30_blend4_si07": dict(desc="4-way blend of the SI^0.7-offset family: P34_b07, F22_b07_fs, A9_b07_cat, B27_b07_smooth", proposer="AI (probe evidence 19 Oct)",
                             model="blend", step=0.1, parts=["P34_b07", "F22_b07_fs", "A9_b07_cat", "B27_b07_smooth"]),
 })
+
+# Overnight O3: seed bags of the SI^0.7-offset family where the mechanism lives (buildings), then X31
+EXPERIMENTS.update({
+    **{f"P34_b07_s{sd}": dict(desc=f"P34_b07 with seed {sd}", proposer="AI (overnight O3)", model="lgbm", params={**_P135, "seed": sd},
+                             target=_T135, target_by_line=_SI_B(0.7), features=_F135) for sd in (101, 202)},
+    "P34_b07_bag": dict(desc="P34_b07 averaged over 3 seeds", proposer="AI (overnight O3)", model="blend", average=True,
+                        parts=["P34_b07", "P34_b07_s101", "P34_b07_s202"]),
+    **{f"A9_b07_s{sd}": dict(desc=f"A9_b07_cat with random_seed {sd}", proposer="AI (overnight O3)", model="catboost", params={"random_seed": sd},
+                            target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7), features={**HIST_F, "drop": NOISE + ["make_model"]}) for sd in (101, 202)},
+    "A9_b07_bag": dict(desc="A9_b07_cat averaged over 3 seeds", proposer="AI (overnight O3)", model="blend", average=True,
+                       parts=["A9_b07_cat", "A9_b07_s101", "A9_b07_s202"]),
+    "X31_blend4_si07_bags": dict(desc="SI^0.7 family with seed bags: P34_b07_bag, F22_b07_fs, A9_b07_bag, B27_b07_smooth", proposer="AI (overnight O3)",
+                                 model="blend", step=0.1, parts=["P34_b07_bag", "F22_b07_fs", "A9_b07_bag", "B27_b07_smooth"]),
+})
