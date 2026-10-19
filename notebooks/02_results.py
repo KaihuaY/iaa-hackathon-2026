@@ -325,6 +325,41 @@ HTML(html)
 # %%
 import decisions_round4
 importlib.reload(decisions_round4)
-html4 = (board.render_board(decisions_round4.DECISIONS).replace("iaa-decision-board-v1", "iaa-decision-board-round4")
+html4 = (board.render_board(decisions_round4.DECISIONS[:1]).replace("iaa-decision-board-v1", "iaa-decision-board-round4")
          .replace("dboard", "dboard4"))
 HTML(html4)
+
+# %% [markdown]
+# ## 10 · 19 Oct: why the leaders are ahead, and what the probes found
+# **Leaderboard:** #1 0.12996, #2 0.12910, us #3 0.12815 (file of 17 Oct). 10 submissions were used on 19 Oct (user-approved batch).
+#
+# **Ruled out:** 2025 claims in the data (none), trend method (premium vs claims 1 % apart), weather range (in range), reserve adequacy,
+# data re-audit (nothing material), training-years sum-insured miscalibration (nested calibration +0.00003).
+#
+# **Probe table** (same rows, noise-free differences; base X21 raw 0.12744):
+#
+# | Probe | Public LB |
+# |---|---|
+# | Buildings ×1.09 / ×1.15 | 0.12783 / 0.12772 (optimum ×1.098) |
+# | Contents ×1.03 / ×1.06 | 0.12748 / 0.12748 (flat) |
+# | Motor new business ×1.06 | 0.12744 |
+# | Motor full-year rows ×1.04 | 0.12751 |
+# | Buildings SI top quartile ×1.08 / ×1.16 | 0.12785 / 0.12808 (optimum ≈ ×1.22, ≈ +0.0007) |
+# | Buildings SI bottom quartile ×1.08 | 0.12734 |
+#
+# **Reading.** The 2025 buildings shift is a sum-insured structure (high-SI homes under-priced), not in the training years. The local
+# mechanism that helps is sum_insured^0.7 in the buildings exposure offset (+0.0003–0.0005 per family on buildings; X30 nested 0.1598 = X21).
+#
+# **Round-6 verdicts:** segment blends −, recalibration −, grid 0, CatBoost bag +0.0001 (X21), smooth frequency 0, per-line cap 0,
+# model-based loading −, low-lr +0.0001, unconstrained −, mileage sentinel 0. The model loop closes after X28/X29.
+#
+# **Next steps (UTC):**
+# - X25 / X28 / X29 blends finish ~03:20 / ~03:50 / ~05:30 on 19 Oct; accept only if nested ≥ 0.1600.
+# - 20 Oct 00:03: submit the two candidate files `20261018_2021_X21_blend4_a1bag_sifix.csv` and `20261018_2152_X30_blend4_si07_sifix.csv` (expected ≈ 0.1284 public).
+# - 20 Oct: your decision on up to 4 extra probes (card below).
+# - 22 Oct: final pick and tick on kaggle.com. 23 Oct 16:00: close.
+
+# %%
+html5 = (board.render_board(decisions_round4.DECISIONS[1:]).replace("iaa-decision-board-v1", "iaa-decision-board-round5")
+         .replace("dboard", "dboard5"))
+HTML(html5)
