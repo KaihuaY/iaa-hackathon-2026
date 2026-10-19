@@ -20,3 +20,4 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 | 06:07 | Leaderboard check: us #5 0.12815 | margin_to_next 0.00181 | top5: #1 ManuelRodr?guez 0.12996, #2 Simone 0.12921, #3 Tevfik Do?ukan I??k 0.12893, #4 applause_bin 0.12817, #5 kaiY 0.12815 | ALERT | no jobs running; no launches |
 | 06:10 | Correction: X29 (unconstrained-part blend) is still running (started 00:23, 5-part grid slowed by concurrent jobs); motor/buildings nested 0.1105/0.1158 so far = X21; final verdict when it ends | no launches |
 | 06:25 | X29 final: nested 0.1598 = X21 -> rejected; all overnight chains finished, machine idle | no launches; next: 11:07 UTC morning report, 20 Oct 00:03 UTC candidates |
+| 11:07 | Morning leaderboard check: us #5 0.12815 | margin_to_next 0.00181 | top5: #1 ManuelRodr?guez 0.12996, #2 Tevfik Do?ukan I??k 0.12940, #3 Simone 0.12923, #4 applause_bin 0.12817, #5 kaiY 0.12815 | ALERT | morning report sent |
