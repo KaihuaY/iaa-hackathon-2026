@@ -363,3 +363,20 @@ HTML(html4)
 html5 = (board.render_board(decisions_round4.DECISIONS[1:]).replace("iaa-decision-board-v1", "iaa-decision-board-round5")
          .replace("dboard", "dboard5"))
 HTML(html5)
+
+# %% [markdown]
+# ## 11 · 19 Oct 17:00 UTC — status and plan
+#
+# 1. **Nothing is running.** The local model search is closed at nested CV 0.1598 ± 0.0002 (about 40 ideas since 17 Oct). Latest: tail models
+#    for large outliers (T3 0.1579, motor power 1.7 0.1082 — below baseline; the large-loss excess is not predictable from features, OOF corr 0.012);
+#    written premium as a blend part X27 nested 0.1599 (+0.0001, not adopted).
+# 2. **Leaderboard (public, 11:07 UTC):** #1 0.12996, #2 0.12940, #3 0.12923, #4 0.12817, us #5 0.12815.
+# 3. **Debate outcome:** public-row factors are mostly sampling noise (SD 0.10–0.13 per sum-insured quartile, 0.05 per line); a +0.0007 CV gain
+#    shows ≤ 0 on the public slice 1 time in 6; the final (private) ranking favours a credibility-shrunk file.
+# 4. **Scheduled (UTC, 20 Oct):**
+#    - 00:03 — two candidates (X21_sifix, X30_sifix) + four large-segment probes (contents SI Q4 ×1.10; motor value groups 15–20 ×1.06;
+#      buildings wind-jump regions ×1.08; buildings Q3 split-half ×1.20).
+#    - 00:37 — three tail-test files (T3 tail model; X21 × large-loss propensity uplift; X21 with power-1.7 motor). Slot 10 in reserve.
+# 5. **Next:** 20 Oct read the 9 scores with the exact Tweedie response and credibility Z; 21 Oct up to 4 follow-ups; 22 Oct submit the shrunk file
+#    (`submissions/20261019_0825_X30_blend4_si07_shrunk.csv`) and the probe-fitted file, user ticks the final; 23 Oct 16:00 Part 1 closes.
+# 6. **Under discussion:** combining existing submission files into a better view (see the chat).
