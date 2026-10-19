@@ -33,6 +33,9 @@ def _atom_mask(te: pd.DataFrame, atom: str) -> np.ndarray:
         return te[col].astype(str).isin(vals).values
     col, val = atom.split("=", 1)
     col, val = col.strip(), val.strip()
+    if col.endswith("_even") and col[:-5] in te.columns:          # split-half by parity of an id column (lumpiness test)
+        last = te[col[:-5]].astype(str).str.extract(r"(\d)\D*$")[0].fillna("0").astype(int)   # parity of the last digit
+        return ((last % 2) == int(val)).values
     if col.endswith("_q") and col[:-2] in te.columns and val in ("top", "bottom"):
         x = te[col[:-2]].astype(float)
         return (x >= x.quantile(0.75)).values if val == "top" else (x <= x.quantile(0.25)).values
