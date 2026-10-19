@@ -484,11 +484,11 @@ EXPERIMENTS.update({
                            target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7),
                            features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
     "A9_b07_cat": dict(desc="A1 CatBoost with sum_insured^0.7 in the buildings offset", proposer="AI (probe evidence 19 Oct)", model="catboost",
-                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.5), features={**HIST_F, "drop": NOISE + ["make_model"]}),
+                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7), features={**HIST_F, "drop": NOISE + ["make_model"]}),
     "F22_b07_fs": dict(desc="F18 freq x sev with sum_insured^0.7 in the buildings offset", proposer="AI (probe evidence 19 Oct)", model="freqsev",
                        params={"freq": {**TUNED, "min_data_in_leaf": 2000},
                                "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600}},
-                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.5), features={**HIST_F, "drop": NOISE + ["make_model"]}),
+                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7), features={**HIST_F, "drop": NOISE + ["make_model"]}),
 })
 
 EXPERIMENTS.update({
