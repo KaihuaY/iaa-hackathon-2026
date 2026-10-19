@@ -521,3 +521,17 @@ EXPERIMENTS.update({
                             params=_SMOOTH_GLM, target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7),
                             features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
 })
+
+# 19 Oct, user request: models aimed at the large outliers ("jumps"); 3 public-LB tests on 20 Oct
+EXPERIMENTS.update({
+    "T1_cap999": dict(desc="P20_135 trained almost uncapped (99.9th pct) with segment loading: learn the jumps directly", proposer="user (tail test)",
+                      model="lgbm", params=_P135, target={**_T135, "cap_q": 0.999}, features=_F135),
+    "T2_power17": dict(desc="P20_135 with Tweedie power 1.7 (heavier-tailed training objective)", proposer="user (tail test)", model="lgbm",
+                       params={**_P135, "tweedie_variance_power": 1.7}, target=_T135, features=_F135),
+    "T3_tailload": dict(desc="P27 model-based large-loss loading with more freedom (shrink 1.0, min leaf 500, clip 3)", proposer="user (tail test)",
+                        model="lgbm", params=_P135,
+                        target={**FULL_T, "cap_q": 0.99, "loading": "model", "loading_params": {"shrink": 1.0, "clip": 3.0, "min_data_in_leaf": 500, "num_leaves": 15}},
+                        features=_F135),
+    "T4_cap995_p17": dict(desc="cap 99.5th pct + power 1.7 + segment loading", proposer="user (tail test)", model="lgbm",
+                          params={**_P135, "tweedie_variance_power": 1.7}, target={**_T135, "cap_q": 0.995}, features=_F135),
+})
