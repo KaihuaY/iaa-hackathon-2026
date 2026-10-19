@@ -79,3 +79,13 @@ from models with unbounded functional forms.
 | 3 | Covariate-shift weights hook (`_fit_predict`): weights computed against the rows each fit predicts; mean 1; no-op without the key | Synthetic tests (same-distribution ≈ 1, shifted target, no-op); golden hash | Correct; **judge only on the 2023 holdout** (CV folds are training-distributed, so CV cannot score it) |
 | 4 | Risk: `_concat_frames` drops columns not shared by the pooled lines | Noted at review; checked on the first pooled quick screen | — |
 | 5 | `largeloss._num` (smaller model) used `np.issubdtype` on pandas Categorical columns → `TypeError` on the first real run (P27) | Caught by the run, not by the synthetic tests (which used object columns) | Fixed with `pd.api.types.is_numeric_dtype`; regression test with a real `Categorical` added |
+
+## 2026-10-19 · Review 6: three-agent strategy debate (actuary / Kaggle tactician / validation skeptic), judged by Fable
+
+| # | Finding | Evidence | Decision |
+|---|---|---|---|
+| 1 | Factors fitted on the public rows are substantially sampling noise: SD 0.10–0.13 per SI quartile, 0.05 per line; credibility Z ≈ 0.03–0.5 | X21 OOF bootstrap on public-sized samples; year-shock vs public-noise decomposition | Credibility-shrink every leaderboard-derived factor; build a shrunk final candidate; decide the ticked file on 22 Oct |
+| 2 | "CV gains do not transfer" was a misreading: P(public gain ≤ 0 \| CV +0.0007) = 0.17 | paired subset bootstrap | Keep choosing models by nested CV; probes only for the 2025 level/structure |
+| 3 | Small-cell probes (< 10 % of a line) are unreadable (σ 0.15–0.25) | noise algebra + bootstrap | Two small-cell probes replaced by large-segment ones (user approved) |
+| 4 | No data mechanism supports a 2025 high-SI shift (indexation uniform; no SI-by-year trend; tariff flat by SI; reserves flat by SI) | read-only checks | Treat the public tilt as mostly noise; keep the model-driven SI^0.7 tilt |
+Full synthesis: docs/debate_19oct.md.
