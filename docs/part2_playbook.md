@@ -76,3 +76,16 @@ python -P -E scripts/run_experiment.py L17_tuned --quick
 | How we checked | AI outputs reviewed, tests, Part 1 regression | `docs/ai_review_log.md`, `tests/test_golden_part1.py` |
 | Remaining uncertainty | Level (immature year, trend), thin segments, untested hard-coded items, LB-only evidence | The decisions log and `level_probe.csv`. State it as ranges. |
 | Process | The rehearsal proved the pipeline on a synthetic market | `docs/rehearsal_report.md`, `docs/rehearsal_report_b.md` |
+
+## Lessons from the Part 1 end-game (19 Oct debate — apply from day 1 in Part 2)
+- **Leaderboard-derived factors are mostly noise unless the segment is large.** On a public subset of ~20–25 % of the
+  test rows, the Tweedie-optimal multiplier of a whole line has sampling SD ≈ 0.05 and of a sum-insured quartile ≈ 0.10–
+  0.13. Treat every probe reading with credibility Z = τ²/(τ² + σ²) (τ from year-to-year A/E variation, σ from a
+  public-sized bootstrap of the OOF predictions — `docs/diagnostics_17oct.md` §10d) and never probe cells under ~10 %
+  of a line. Read probes with the exact Tweedie response: ΔLB = −α(s^−0.5 − 1) − b(s^0.5 − 1), b ∝ Σμ^0.5.
+- **Nested-CV gains of +0.0005 are invisible on a small public board** (P(≤ 0) ≈ 0.17): keep choosing models by
+  nested CV and the forward holdout; use submissions only for the test-year level/structure.
+- **Real sum insured.** Nominal SI as a feature plus a premium-index trend double-counts SI growth (+3 %/yr here);
+  deflate SI to the target year (SI / (1+g)^(target − year)) or trend by a claims-cost index when it backtests better.
+- **SI elasticity in the offset** (`target_by_line: {"buildings": {"si_offset_power": 0.7}}`) was the one mechanism
+  that moved buildings CV (+0.0003–0.0005 per family); screen k ∈ {0.3, 0.5, 0.7} per home line on day 1.
