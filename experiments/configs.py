@@ -473,3 +473,20 @@ EXPERIMENTS.update({
                            target={**FULL_T, "cap_q": 0.99}, target_by_line={"buildings": {"si_offset_power": 1.0}, "contents": {"si_offset_power": 1.0}},
                            features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
 })
+
+# SI offset: buildings responds strongly (k=0.5: +0.0017 quick), contents does not -> buildings-only; tune k
+_SI_B = lambda k: {"buildings": {"si_offset_power": k}}
+EXPERIMENTS.update({
+    **{f"P34_b{int(k*10):02d}": dict(desc=f"P20_135 with sum_insured^{k} in the buildings offset only", proposer="AI (probe evidence 19 Oct)", model="lgbm",
+                                     params=_P135, target=_T135, target_by_line=_SI_B(k), features=_F135) for k in (0.3, 0.5, 0.7)},
+    "B27_b05_smooth": dict(desc="B20 smooth-boost with sum_insured^0.5 in the buildings offset", proposer="AI (probe evidence 19 Oct)", model="glmboost",
+                           params={"glm": _SMOOTH_GLM, **TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35},
+                           target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.5),
+                           features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+    "A9_b05_cat": dict(desc="A1 CatBoost with sum_insured^0.5 in the buildings offset", proposer="AI (probe evidence 19 Oct)", model="catboost",
+                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.5), features={**HIST_F, "drop": NOISE + ["make_model"]}),
+    "F22_b05_fs": dict(desc="F18 freq x sev with sum_insured^0.5 in the buildings offset", proposer="AI (probe evidence 19 Oct)", model="freqsev",
+                       params={"freq": {**TUNED, "min_data_in_leaf": 2000},
+                               "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600}},
+                       target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.5), features={**HIST_F, "drop": NOISE + ["make_model"]}),
+})
