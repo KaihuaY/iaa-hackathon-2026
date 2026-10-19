@@ -509,3 +509,15 @@ EXPERIMENTS.update({
     "X31_blend4_si07_bags": dict(desc="SI^0.7 family with seed bags: P34_b07_bag, F22_b07_fs, A9_b07_bag, B27_b07_smooth", proposer="AI (overnight O3)",
                                  model="blend", step=0.1, parts=["P34_b07_bag", "F22_b07_fs", "A9_b07_bag", "B27_b07_smooth"]),
 })
+
+# Overnight O4: smooth GLM with SI x wind / SI x property_age products + SI^0.7 buildings offset (local proxy for storm losses ∝ SI)
+EXPERIMENTS.update({
+    "G20_glm_si_wind": dict(desc="Smooth GLM (no counters) + (sum_insured x wind_exposure_index), (sum_insured x property_age) products + SI^0.7 buildings offset",
+                            proposer="AI (overnight O4)", model="glm",
+                            params={**_SMOOTH_GLM, "interactions": _SMOOTH_GLM["interactions"] + [("sum_insured", "wind_exposure_index"), ("sum_insured", "rainfall_mm")]},
+                            target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7),
+                            features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+    "G21_glm_si_only": dict(desc="Smooth GLM (no counters) + SI^0.7 buildings offset (reference for G20)", proposer="AI (overnight O4)", model="glm",
+                            params=_SMOOTH_GLM, target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7),
+                            features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}),
+})
