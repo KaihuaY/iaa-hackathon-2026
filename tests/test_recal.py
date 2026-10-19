@@ -42,3 +42,49 @@ def test_out_of_range_clipped():
         hi, lo = m(np.array([pred.max()]))[0], m(np.array([pred.min()]))[0]
         assert m(np.array([pred.max() * 100]))[0] == hi
         assert m(np.array([pred.min() / 100]))[0] == lo
+
+
+# ---- covariate calibration ----
+from recal import fit_covariate, nested_eval_cov  # noqa: E402
+
+
+def _cov_data(factor, n=60_000, seed=1):
+    rng = np.random.default_rng(seed)
+    x = rng.lognormal(0, 0.7, n)
+    pred = np.exp(rng.normal(0, 0.5, n))
+    mean = pred * factor(x)
+    y = rng.gamma(2.0, mean / 2.0) * (rng.random(n) < 0.5) * 2
+    return x, pred, y, rng.integers(0, 6000, n)
+
+
+def _tilt(x):
+    return 1 + 0.3 * (np.argsort(np.argsort(x)) / len(x) - 0.5)
+
+
+def test_cov_shift_corrected_monotone():
+    x, pred, y, g = _cov_data(_tilt)
+    for mono in (True, False):
+        f = lambda xx, pp, yy, m=mono: fit_covariate(xx, pp, yy, monotone=m)
+        b, r = nested_eval_cov(x, pred, y, g, f)
+        assert r > b + 0.0005
+    gf = fit_covariate(x, pred, y)
+    assert (np.diff(gf(np.sort(x))) >= -1e-12).all()
+
+
+def test_cov_calibrated_not_harmed():
+    x, pred, y, g = _cov_data(lambda x: np.ones_like(x))
+    b, r = nested_eval_cov(x, pred, y, g, fit_covariate)
+    assert abs(r - b) < 0.0005
+
+
+def test_cov_level_and_bounds():
+    x, pred, y, _ = _cov_data(_tilt)
+    for mono in (True, False):
+        gf = fit_covariate(x, pred, y, monotone=mono)
+        v = gf(x)
+        assert abs((v * pred).sum() / pred.sum() - 1) < 1e-9
+        assert v.min() >= 0.7 - 1e-9 and v.max() <= 1.4 + 1e-9
+    y2 = pred * np.where(x > np.median(x), 3.0, 0.2)          # extreme: bounds must bind
+    v = fit_covariate(x, pred, y2)(x)
+    assert v.min() >= 0.7 - 1e-9 and v.max() <= 1.4 + 1e-9
+    assert abs((v * pred).sum() / pred.sum() - 1) < 1e-9
