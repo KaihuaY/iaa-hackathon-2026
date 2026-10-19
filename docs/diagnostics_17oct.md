@@ -109,3 +109,13 @@ specific to the public subset); the remaining lever is a small probe batch — b
 contents ×1.03/×1.06, then the calibrated candidate — approved by the user for 19 Oct. The private-LB caveat stands:
 the public-vs-private level gap (sd ≈ 0.005) is larger than any of these differences, so the final ranking will be
 decided largely by how the 2025 level transfers, which no one can observe before the close.
+
+## 10. 19 Oct probe batch on the X21 base (public LB; same rows, noise-free differences)
+| File | Public LB | Reading |
+|---|---|---|
+| X21 raw | 0.12744 | = X10 raw (0.12749) despite +0.0007 nested CV: the local gains since X10 do not transfer to the public rows |
+| buildings ×1.09 / ×1.15 | 0.12783 / 0.12772 | parabola optimum **×1.098** (X10 probe: ×1.093) — the buildings level shift is stable across models; +0.0004 |
+| contents ×1.03 / ×1.06 | 0.12748 / 0.12748 | flat (+0.00004): no contents level shift |
+Implication: a calibrated X21 would score ≈0.1280, below the submitted FINAL_avg3_levelcal (0.12815); line-level
+calibration is exhausted; the leaders' +0.002 is structure the public rows reward and our CV cannot see. Next:
+segment probes (motor new business, motor full-year exposure shape, buildings SI top/bottom quartile).
