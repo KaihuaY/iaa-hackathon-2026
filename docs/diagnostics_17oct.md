@@ -200,3 +200,6 @@ Reference: X21 × line levels (motor ×1.029, buildings ×1.093) ≈ 0.1279 (X21
 Reading: the outlier models lose on the public rows exactly as CV predicted; the small public gain of the
 propensity uplift (range 0.97–1.10 per row) is the size of public-row noise (σ ≈ 0.0003 for a file-level
 difference) and has no CV support → not adopted. Large losses are not predictable from these features.
+| slot 10 | credibility-shrunk final candidate (X30 × buildings SI bands [1.01,1.03,1.05,1.07], motor ×1.012, contents ×1.02) | **0.12820** | −0.00018 vs X30_sifix (0.12838); +0.00005 vs the 17 Oct final (0.12815) |
+Reading: shrinking the public-fitted factors costs 0.00018 on the public rows — about the size of the noise-fit gain
+the debate predicted (≈ 0.0001 per fitted factor). Both files are now selectable for the 22 Oct tick.
