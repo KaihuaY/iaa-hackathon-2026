@@ -30,3 +30,4 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 | 00:42 | Tail tests: T3 0.12709, X21 x tail uplift 0.12816, power-1.7 motor 0.12668 — outlier models lose, as CV predicted; 9 of 10 used; slot 10 (shrunk_c102) at 00:57 via cron 53a4890b | - |
 | 01:00 | Slot 10: shrunk final candidate 0.12820 (X30_sifix 0.12838); 10/10 used on 20 Oct | final tick decision 22 Oct |
 | 2026-10-20 12:37 | Leaderboard watch: us #7 0.12838 | margin_to_next 0.00158 | top5: #1 ManuelRodr?guez 0.12996, #2 Eda ?zlem Anda 0.12957, #3 Tevfik Do?ukan I??k 0.12955, #4 Simone 0.12925, #5 Kohei Kudo 0.12867 | ALERT | read-only |
+| 2026-10-20 23:37 | Leaderboard watch: us #10 0.12838 | margin_to_next 0.00158 | top5: #1 ManuelRodr?guez 0.12996, #2 Tevfik Do?ukan I??k 0.12959, #3 Eda ?zlem Anda 0.12957, #4 Simone 0.12930, #5 Bavan Amir 0.12908 | ALERT | read-only |
