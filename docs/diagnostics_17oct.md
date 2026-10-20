@@ -189,3 +189,14 @@ Exact Tweedie reading: ΔLB = −α(s^−0.5−1) − b(s^0.5−1), s* = α/b, b
 Conclusion: the high-SI uplift on the public rows is carried by a handful of claims (split-half test), and the
 high-wind regions do not want any uplift at all — both point to public-row noise, not a 2025 mechanism. Supports
 ticking the credibility-shrunk file.
+
+### 10e (cont.). Tail tests, slots 7–9 (20 Oct 00:40 UTC; user request: models for the large outliers)
+Reference: X21 × line levels (motor ×1.029, buildings ×1.093) ≈ 0.1279 (X21 raw 0.12744 + the probed line gains).
+| File | Public LB | vs ≈0.1279 | Local CV |
+|---|---|---|---|
+| T3 model-based large-loss loading + levels | 0.12709 | −0.0008 | 0.1579 (below baseline) |
+| X21 × per-row large-loss propensity uplift + levels | 0.12816 | ≈ +0.0002 | uplift not CV-validated (excess-model OOF corr 0.012) |
+| X21 with power-1.7 motor + levels | 0.12668 | −0.0012 | motor 0.1082 < 0.1091 |
+Reading: the outlier models lose on the public rows exactly as CV predicted; the small public gain of the
+propensity uplift (range 0.97–1.10 per row) is the size of public-row noise (σ ≈ 0.0003 for a file-level
+difference) and has no CV support → not adopted. Large losses are not predictable from these features.
