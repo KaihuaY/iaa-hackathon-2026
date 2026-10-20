@@ -1,6 +1,6 @@
 # Video outline (5 minutes maximum)
 
-Only the first 5 minutes are graded. Total below: 4:30. Screens: EDA dashboard (`notebooks/01_eda.py`), results dashboard (`notebooks/02_results.py`), repo files. Arc: data fixes, target engineering, models and blend, level probe, non-linear hunt, final pick.
+Only the first 5 minutes are graded. Total below: 4:33. Screens: EDA dashboard (`notebooks/01_eda.py`), results dashboard (`notebooks/02_results.py`), repo files. Arc: data fixes, target engineering, models and blend, level probe, non-linear hunt, final pick.
 
 | # | Time | On screen | Say (one sentence) |
 |---|---|---|---|
@@ -11,9 +11,9 @@ Only the first 5 minutes are graded. Total below: 4:30. Screens: EDA dashboard (
 | 5 | 2:00-2:25 | Results sections 2 and 5b (CV vs LB, level probe) | CV tracks the public leaderboard (correlation 0.995, noise 0.002), and a one-parameter-per-line probe corrected the 2025 price level. |
 | 6 | 2:25-3:00 | Results section 9 (non-linear hunt) | Following the ln(ab) hint, a smooth log-link GLM lifted quick CV from 0.1608 to 0.1620, but our guardrails, not CV, caught two real defects: an extrapolation blow-up (2023 holdout -0.66, test mean 24,016 against about 400) and calendar-proxy exposure counters (holdout -0.59, fixed to +0.108); the accepted base reaches CV 0.1574. |
 | 7 | 3:00-3:30 | `docs/ai_review_log.md`, `docs/experiment_log.md` | AI proposed most experiments and code, but every change passed pytest, CV and a human decision, and AI reviews caught bugs such as a credibility ratio biased 11 to 24 % low. |
-| 8 | 3:30-4:05 | Results section 1, then section 9 decision card | We are fourth at 0.12815; the new candidate is predicted near 0.1290, inside the noise, but a bootstrap says it wins on 96 to 100 % of row subsets, so the final pick is for robustness. |
-| 9 | 4:05-4:30 | Repo tree, Part 2 checklist | For the new market we re-run the register, backtests, level probe, stability screen and guardrails, and [TBD: what changed in Part 2]. |
+| 8 | 3:30-4:08 | Results section 1, then probe table (split-half, tail tests) | We stopped chasing the public board (best 0.12838): probes showed the high sum-insured signal was a few claims, so we shrank the factors and picked the 0.12820 file built for the hidden 80 % of rows. |
+| 9 | 4:08-4:33 | Repo tree, Part 2 checklist | For the new market we re-run the register, backtests, level probe, stability screen and guardrails, and [TBD: what changed in Part 2]. |
 
 Notes
 - About 400 words; beats 6 and 8 need a steady pace. Fill beat 9 after Part 2; quote only figures in `docs/experiment_log.md`.
-- No Kaggle submission since 17 Oct; the final choice is made on 22 Oct.
+- Ten submissions used on 20 Oct; the final tick is made on 22 Oct.
