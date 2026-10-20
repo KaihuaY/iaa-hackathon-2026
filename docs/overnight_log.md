@@ -29,3 +29,4 @@ the approved 20 Oct 00:03 UTC candidates, stop on errors, Fable reviews every re
 | 00:15 | Slot 10 approved: shrunk final candidate rebuilt with contents x1.02 (submissions/20261019_2013_X30_blend4_si07_shrunk_c102.csv; +0.19 % vs shrunk, corr 0.99999); cron 53a4890b submits it at 00:57 UTC after the tail tests | - |
 | 00:42 | Tail tests: T3 0.12709, X21 x tail uplift 0.12816, power-1.7 motor 0.12668 — outlier models lose, as CV predicted; 9 of 10 used; slot 10 (shrunk_c102) at 00:57 via cron 53a4890b | - |
 | 01:00 | Slot 10: shrunk final candidate 0.12820 (X30_sifix 0.12838); 10/10 used on 20 Oct | final tick decision 22 Oct |
+| 2026-10-20 12:37 | Leaderboard watch: us #7 0.12838 | margin_to_next 0.00158 | top5: #1 ManuelRodr?guez 0.12996, #2 Eda ?zlem Anda 0.12957, #3 Tevfik Do?ukan I??k 0.12955, #4 Simone 0.12925, #5 Kohei Kudo 0.12867 | ALERT | read-only |
