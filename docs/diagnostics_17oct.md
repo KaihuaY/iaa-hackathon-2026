@@ -175,3 +175,17 @@ in-sample, which inflated a first run to +0.0008). Nested CV, GroupKFold(5) by p
 Reading: no combination of what we have beats the 4-part blend; free weight optimisation over 80 near-identical
 parts overfits. Together with the public-score fit (docs/lb_response_fit.md) this closes "combine the submissions":
 the best view is X21/X30 plus credibility-shrunk level/tilt factors. The written file GB_grand_blend.csv is not used.
+
+### 10e. 20 Oct batch (00:03 UTC; base for probes = X21 raw 0.12744; same rows, noise-free differences)
+| # | File | Public LB | Δ vs base / reading |
+|---|---|---|---|
+| 1 | X21 × buildings SI bands [1.0,1.05,1.08,1.20], motor ×1.029 | 0.12827 | +0.00012 over the 17 Oct final |
+| 2 | X30 (SI^0.7 offset) × residual bands [1.01,1.055,1.085,1.16], motor ×1.029 | **0.12838** | new best (+0.00023) |
+| 3 | contents SI top quartile ×1.10 | 0.12751 | +0.00007 → s* ≈ 1.16, Z ≈ 0.12 → shrunk ≈ ×1.02 |
+| 4 | motor value groups 15–20 ×1.06 | 0.12749 | +0.00005 → s* ≈ 1.09 (incl. the line's 3 %), shrunk ≈ +1–2 % relative |
+| 5 | buildings wind-jump regions (R03,R08,R06,R11,R12) ×1.08 | 0.12733 | −0.00011 → s* ≈ 1.00 for these regions vs ×1.095 for the line: the weather-level story is rejected |
+| 6 | buildings SI Q4, even-id half ×1.20 | 0.12743 | −0.00001 → s* ≈ 1.09 in the even half vs ≈ 1.25 for all of Q4 (implied ≈ 1.4 in the odd half): **lumpy** — the Q4 gain sits in a few rows of one half |
+Exact Tweedie reading: ΔLB = −α(s^−0.5−1) − b(s^0.5−1), s* = α/b, b ∝ Σμ^0.5 (buildings line b = 0.180).
+Conclusion: the high-SI uplift on the public rows is carried by a handful of claims (split-half test), and the
+high-wind regions do not want any uplift at all — both point to public-row noise, not a 2025 mechanism. Supports
+ticking the credibility-shrunk file.
