@@ -8,13 +8,14 @@ rows (≈ 75–80 % of the test set that the public board never shows).
 | File (in `submissions/`) | Public LB | What it is | sha256 (first 16) |
 |---|---|---|---|
 | **`20261019_2013_X30_blend4_si07_shrunk_c102.csv`** | 0.12820 | X30 blend (sum insured^0.7 in the buildings exposure) × **credibility-shrunk** factors: buildings by SI quartile 1.01 / 1.03 / 1.05 / 1.07, motor ×1.012, contents ×1.02 | 554da91e80348667 |
+| `20261022_1708_X33_blend4_si07_allbags_shrunk_c102.csv` | 0.12826 | **equivalent alternative (22 Oct)**: identical shrunk factors on X33 = the X30 family with every part a 3-seed average; nested CV equal (0.1598); public +0.00006 (noise-sized) | d83ce8cba461830d |
 | `20261018_2152_X30_blend4_si07_sifix.csv` | 0.12838 | same X30 × **probe-fitted** factors: buildings 1.01 / 1.055 / 1.085 / 1.16, motor ×1.029 | ebd4dd966f43f06b |
 | `20261018_0146_FINAL_part1.csv` (see note below) | 0.12815 | 17 Oct final: average of three blends × flat line factors (motor ×1.029, buildings ×1.093) | c1780f47a3d55ce8 |
 
 Name note: the file submitted 17 Oct (public 0.12815) is listed as `20261017_2143_FINAL_part1.csv` in
 `docs/lb_response_fit.md` and as `20261018_0146_FINAL_part1.csv` in this memo. The sha above refers to the 0146 name.
 
-## Recommendation: tick the shrunk file (`…shrunk_c102.csv`)
+## Recommendation: tick the shrunk file (`…shrunk_c102.csv`) — or its seed-averaged twin X33 (same factors, same CV, slightly lower variance); either is fine, tick exactly one
 
 1. **The extra 0.00018 of the probe-fitted file is mostly fitted to the public rows' particular claims.**
    A factor read off the public slice carries sampling noise of ≈ ±5 % for a whole line and ±10–13 % for a
