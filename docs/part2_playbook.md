@@ -89,3 +89,4 @@ python -P -E scripts/run_experiment.py L17_tuned --quick
   deflate SI to the target year (SI / (1+g)^(target − year)) or trend by a claims-cost index when it backtests better.
 - **SI elasticity in the offset** (`target_by_line: {"buildings": {"si_offset_power": 0.7}}`) was the one mechanism
   that moved buildings CV (+0.0003–0.0005 per family); screen k ∈ {0.3, 0.5, 0.7} per home line on day 1.
+- **Test-row history from the immature last training year is biased low.** In Part 1 the test motor `pol_claims` mean is 0.189 vs 0.202 for 2024 rows (−6.5 %). Develop or rescale the last year's claim counts before building test history features.
