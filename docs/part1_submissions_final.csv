@@ -1,0 +1,79 @@
+﻿Warning: Looks like you're using an outdated `kaggle` version (installed: 2.2.4), please consider upgrading to the latest version (2.2.5)
+ref,fileName,date,description,status,publicScore,privateScore
+
+57538320,20261022_1708_X33_blend4_si07_allbags_shrunk_c102.csv,2026-10-22 21:10:10.417000,"X33 (X30 family, all parts 3-seed bags) x same shrunk factors as the final: bld SI bands [1.01,1.03,1.05,1.07], motor x1.012, contents x1.02",SubmissionStatus.COMPLETE,0.12826,0.13777
+
+57415760,20261019_2013_X30_blend4_si07_shrunk_c102.csv,2026-10-20 00:57:12.280000,"credibility-shrunk final candidate: X30 x buildings SI bands [1.01,1.03,1.05,1.07], motor x1.012, contents x1.02",SubmissionStatus.COMPLETE,0.12820,0.13765
+
+57415254,20261019_0930_X21_blend4_a1bag_motor_p17.csv,2026-10-20 00:38:58.993000,tail test: X21 with power-1.7 motor + levels,SubmissionStatus.COMPLETE,0.12668,0.13617
+
+57415227,20261019_0930_X21_blend4_a1bag_tail_uplift.csv,2026-10-20 00:38:21.367000,tail test: X21 x per-row large-loss propensity uplift + levels,SubmissionStatus.COMPLETE,0.12816,0.13736
+
+57415195,20261019_0930_T3_tailload_tail_levels.csv,2026-10-20 00:37:43.977000,tail test: model-based large-loss loading (T3) + level factors,SubmissionStatus.COMPLETE,0.12709,0.13532
+
+57414136,20261019_0826_X21_blend4_a1bag_seg_buildings_sum_insured_q-toprow_id_even-1_1.2.csv,2026-10-20 00:07:59.803000,probe buildings SI top quartile split-half (even ids) x1.20,SubmissionStatus.COMPLETE,0.12743,0.13815
+
+57414074,20261019_0825_X21_blend4_a1bag_seg_buildings_regioninR03_R08_R06_R11_R12_1.08.csv,2026-10-20 00:07:21.517000,probe buildings high-wind-jump regions x1.08,SubmissionStatus.COMPLETE,0.12733,0.13720
+
+57414027,20261019_0707_X21_blend4_a1bag_seg_motor_vehicle_value_groupin15_16_17_18_19_20_1.06.csv,2026-10-20 00:06:43.513000,probe motor value groups 15-20 x1.06,SubmissionStatus.COMPLETE,0.12749,0.13746
+
+57413990,20261018_2307_X21_blend4_a1bag_seg_contents_sum_insured_q-top_1.1.csv,2026-10-20 00:06:04.977000,probe contents SI top quartile x1.10,SubmissionStatus.COMPLETE,0.12751,0.13755
+
+57413958,20261018_2152_X30_blend4_si07_sifix.csv,2026-10-20 00:05:42.473000,"X30 SI^0.7 blend + residual bands [1.01,1.055,1.085,1.16], motor x1.029",SubmissionStatus.COMPLETE,0.12838,0.13749
+
+57413923,20261018_2021_X21_blend4_a1bag_sifix.csv,2026-10-20 00:05:18.720000,"X21 + buildings SI-band [1.0,1.05,1.08,1.20], motor x1.029",SubmissionStatus.COMPLETE,0.12827,0.13755
+
+57374103,20261018_2011_X21_blend4_a1bag_seg_buildings_sum_insured_q-top_1.16.csv,2026-10-19 00:11:51.403000,segment probe X21_blend4_a1bag buildings sum_insured_q=top x1.16,SubmissionStatus.COMPLETE,0.12808,0.13791
+
+57373975,20261018_2009_X21_blend4_a1bag_seg_buildings_sum_insured_q-bottom_1.08.csv,2026-10-19 00:09:50.470000,segment probe X21_blend4_a1bag buildings sum_insured_q=bottom x1.08,SubmissionStatus.COMPLETE,0.12734,0.13758
+
+57373931,20261018_2008_X21_blend4_a1bag_seg_buildings_sum_insured_q-top_1.08.csv,2026-10-19 00:09:04.007000,segment probe X21_blend4_a1bag buildings sum_insured_q=top x1.08,SubmissionStatus.COMPLETE,0.12785,0.13785
+
+57373902,20261018_2008_X21_blend4_a1bag_seg_motor_row_type-full year_1.04.csv,2026-10-19 00:08:33.687000,segment probe X21_blend4_a1bag motor row_type=full year x1.04,SubmissionStatus.COMPLETE,0.12751,0.13751
+
+57373872,20261018_2007_X21_blend4_a1bag_seg_motor_new_business-True_1.06.csv,2026-10-19 00:08:02.900000,segment probe X21_blend4_a1bag motor new_business=True x1.06,SubmissionStatus.COMPLETE,0.12744,0.13761
+
+57373576,20261018_2004_X21_blend4_a1bag_probe_contents_1.06.csv,2026-10-19 00:05:02.707000,level probe X21_blend4_a1bag contents x1.06,SubmissionStatus.COMPLETE,0.12748,0.13744
+
+57373507,20261018_2004_X21_blend4_a1bag_probe_contents_1.03.csv,2026-10-19 00:04:24.133000,level probe X21_blend4_a1bag contents x1.03,SubmissionStatus.COMPLETE,0.12748,0.13755
+
+57373442,20261018_2003_X21_blend4_a1bag_probe_buildings_1.15.csv,2026-10-19 00:03:54.340000,level probe X21_blend4_a1bag buildings x1.15,SubmissionStatus.COMPLETE,0.12772,0.13691
+
+57373388,20261018_2003_X21_blend4_a1bag_probe_buildings_1.09.csv,2026-10-19 00:03:32.213000,level probe X21_blend4_a1bag buildings x1.09,SubmissionStatus.COMPLETE,0.12783,0.13740
+
+57373204,20261018_2000_X21_blend4_a1bag.csv,2026-10-19 00:02:26.823000,X21_blend4_a1bag: X16 with the CatBoost seed bag | CV 0.1599,SubmissionStatus.COMPLETE,0.12744,0.13762
+
+57333690,20261017_2143_FINAL_part1.csv,2026-10-18 01:44:01.667000,"FINAL candidate: avg(X10,X11,X7) x level factors motor 1.029 buildings 1.093 (user-approved)",SubmissionStatus.COMPLETE,0.12815,0.13718
+
+57333072,20261017_2119_X10_blend4_levelcal.csv,2026-10-18 01:19:58.230000,"X10 level-calibrated: motor x1.029, buildings x1.093 (LB probe, user-approved)",SubmissionStatus.COMPLETE,0.12797,0.13716
+
+57333050,20261017_2118_X10_blend4_probe_buildings_1.1.csv,2026-10-18 01:19:03.903000,level probe X10_blend4 buildings x1.1,SubmissionStatus.COMPLETE,0.12791,0.13721
+
+57331053,20261017_2007_X10_blend4_probe_buildings_1.05.csv,2026-10-18 00:12:51.707000,level probe X10_blend4 buildings x1.05,SubmissionStatus.COMPLETE,0.12781,0.13743
+
+57330822,20261017_2007_X10_blend4_probe_buildings_0.95.csv,2026-10-18 00:08:45.963000,level probe X10_blend4 buildings x0.95,SubmissionStatus.COMPLETE,0.12690,0.13722
+
+57330808,20261017_2007_X10_blend4_probe_motor_1.05.csv,2026-10-18 00:08:24.180000,level probe X10_blend4 motor x1.05,SubmissionStatus.COMPLETE,0.12752,0.13723
+
+57330760,20261017_2007_X10_blend4_probe_motor_0.95.csv,2026-10-18 00:07:46.557000,level probe X10_blend4 motor x0.95,SubmissionStatus.COMPLETE,0.12710,0.13732
+
+57325849,20261017_1703_X10_blend4.csv,2026-10-17 21:03:59.053000,"X10_blend4: 4-way blend: B15, L20 corrected, F17_bag, A1 CatBoost (cached predictions from branch advanced-ml) | CV 0.1593",SubmissionStatus.COMPLETE,0.12749,0.13744
+
+57319665,20261017_1314_X6_blend3bag.csv,2026-10-17 17:15:21.470000,X6_blend3bag: 3-way blend: B15 + seed-bagged L17 + seed-bagged F17 | CV 0.1584,SubmissionStatus.COMPLETE,0.12633,0.13658
+
+57296032,20261017_0102_L6_lgbm.csv,2026-10-17 05:02:42.347000,"L6_lgbm: Standalone regularised Tweedie GBM, G6 target/features (challenger) | CV 0.1521",SubmissionStatus.COMPLETE,0.12345,0.13045
+
+57296018,20261017_0102_X1_blend.csv,2026-10-17 05:02:18.067000,"X1_blend: Per-line blend of B6 (GLM+boost) and L6 (standalone GBM), weights on CV | CV 0.1552",SubmissionStatus.COMPLETE,0.12488,0.13365
+
+57295907,20261017_0058_B6_boost.csv,2026-10-17 04:58:27.223000,B6_boost: G6 GLM + regularised Tweedie GBM boosting from the GLM | CV 0.1515,SubmissionStatus.COMPLETE,0.11967,0.13129
+
+57295628,20261017_0048_G4_cap.csv,2026-10-17 04:48:18.693000,G4_cap: G3 + cap 99.5th pct with loading | CV 0.1450,SubmissionStatus.COMPLETE,0.11353,0.12486
+
+57295616,20261017_0047_G6_trend.csv,2026-10-17 04:47:53.693000,G6_trend: G5 + premium-index trend to 2025 + maturity weights | CV 0.1477,SubmissionStatus.COMPLETE,0.11716,0.12770
+
+57294310,20261017_0001_E2_lgbm.csv,2026-10-17 04:02:28.710000,"E2_lgbm: Tweedie LightGBM per line, raw labels | CV 0.1243",SubmissionStatus.COMPLETE,0.09852,0.10807
+
+57294240,20261016_2359_E1_glm.csv,2026-10-17 03:59:35.987000,"E1_glm: Tweedie GLM per line, banded factors, raw labels | CV 0.1396",SubmissionStatus.COMPLETE,0.10753,0.12051
+
+57294062,20261016_2352_E0_const.csv,2026-10-17 03:52:41.857000,E0_const: Average cost per line x exposure (pipeline / metric check vs host's 0.072) | CV 0.0892,SubmissionStatus.COMPLETE,0.07088,0.07773
+
