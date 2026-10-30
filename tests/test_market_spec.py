@@ -216,3 +216,54 @@ def test_lbmodel_verdict_without_history():
     assert m["n"] == 0
     assert "no LB history for this market yet" in lbmodel.verdict(0.2, m)
     assert not lbmodel.auto_ok(0.5, m)
+
+# ---------------------------------------------------------------- Part 2 (emerging market) spec
+def test_part2_spec_fields():
+    s = ms.REGISTRY["part2"]
+    assert s.data_dir == "data/part2/emerging" and s.train_years == (2023, 2024) and s.test_year == 2025
+    assert s.holdout_year == 2024 and s.last_mature_year == 2023 and s.expected_rows is None
+    assert s.cache_path == ROOT / "experiments" / "cache" / "part2"
+    assert {s.construction_map[k] for k in ("brk", "stn", "wod", "mix")} == {"brick", "stone", "timber", "non_standard"}
+    assert "annual_mileage" not in s.monotone and s.noise_features == ()
+    assert all(d.get(k) not in ("driver_age", "policyholder_age") for d in s.segments.values() for k in ("cat", "num", "col"))
+    assert set(s.completeness_last_year) == set(s.lines) and all(0.85 < v < 1 for v in s.completeness_last_year.values())
+    assert ms.PART1.normalise_labels == ()                   # Part 1 cleaning untouched
+
+
+def test_normalise_labels_maps_variants_to_most_frequent():
+    df = pd.DataFrame({"occupation": ["Retired", "retired", "Retired ", "Retired", None, "IT consultant"]})
+    out = data.normalise_labels(df, ("occupation", "absent_col"))
+    assert out.occupation.tolist()[:4] == ["Retired"] * 4 and pd.isna(out.occupation[4])
+    assert out.occupation[5] == "IT consultant"              # no variant: unchanged (no re-casing)
+    assert data.normalise_labels(df, ()) is df
+
+
+_P2_DATA = (ROOT / "data" / "part2" / "emerging" / "policies_buildings.parquet").exists()
+
+
+@pytest.mark.skipif(not _P2_DATA, reason="Part 2 data not downloaded")
+def test_part2_cleaning_on_real_data():
+    ms.use_spec("part2")
+    for name in ("policies_buildings", "test_buildings"):
+        d = data.clean_policies(data.load(name), "buildings")
+        assert set(d.construction_type.dropna()) == {"brick", "stone", "timber", "non_standard"}
+        assert d.construction_type.notna().all() and d.sum_insured.max() < 5e6
+        days = (d.period_end - d.period_start).dt.days + 1
+        assert ((d.exposure - days / 365).abs() <= 0.02).all()
+    cu = data.normalise_labels(data.load("customers"), ms.get_spec().normalise_labels)
+    keys = cu.occupation.dropna().str.strip().str.lower()
+    assert (cu.occupation.dropna().groupby(keys).nunique() == 1).all()
+
+
+@pytest.mark.skipif(not (ROOT / "experiments" / "cache" / "part2" / "claims.parquet").exists(), reason="part2 base not built")
+def test_part2_completeness_matches_lag_curve():
+    """completeness_last_year = unweighted mean over 2024 rows of the row completeness from the 2023 lag curve."""
+    ms.use_spec("part2")
+    s = ms.get_spec()
+    claims = pd.read_parquet(s.cache_path / "claims.parquet")
+    for line in s.lines:
+        tr = pd.read_parquet(s.cache_path / f"train_{line}.parquet", columns=["period_start", "period_end"])
+        tr = tr[tr.period_start.dt.year == 2024]
+        days = ((tr.period_end - tr.period_start).dt.days + 1).values
+        comp = target._row_integral(tr, target._daily(target.completeness_curve(claims, line))) / days
+        assert comp.mean() == pytest.approx(s.completeness_last_year[line], abs=6e-4), line

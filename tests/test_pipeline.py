@@ -139,11 +139,15 @@ def test_target_development(base, line):
     assert (t.w > 0).all() and (t.w <= 1).all()
 
 
-@pytest.mark.part1_data
 def test_submission_validation():
+    """Spec-aware (runs under every market): Part 1 expects 626,639 rows, others the sample_submission length."""
+    from market_spec import get_spec
     from submit import validate
+    spec = get_spec()
     s = load("sample_submission").assign(prediction=1.0)
-    assert len(validate(s)) == 626_639
+    assert len(validate(s)) == (spec.expected_rows if spec.expected_rows is not None else len(s))
+    if spec.name == "part1":
+        assert len(s) == 626_639
     with pytest.raises(AssertionError):
         validate(s.assign(prediction=-1.0))
     with pytest.raises(AssertionError):

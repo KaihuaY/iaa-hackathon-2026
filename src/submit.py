@@ -14,6 +14,8 @@ from market_spec import get_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 SUB_DIR = ROOT / "submissions"
+# market -> (sub-folder, file-name prefix); markets that score on the same Kaggle competition share one folder
+SUB_FOLDER = {"part2pool": ("part2", "P2_POOL_")}
 
 
 def __getattr__(name):
@@ -38,8 +40,15 @@ def validate(sub: pd.DataFrame) -> pd.DataFrame:
 
 
 def write(sub: pd.DataFrame, name: str) -> Path:
-    SUB_DIR.mkdir(exist_ok=True)
-    path = SUB_DIR / f"{datetime.now():%Y%m%d_%H%M}_{name}.csv"
+    """Part 1: submissions/<local time>_<name>.csv (unchanged). Other markets: submissions/<market>/<UTC time>_<name>.csv."""
+    spec = get_spec()
+    if spec.name == "part1":
+        SUB_DIR.mkdir(exist_ok=True)
+        path = SUB_DIR / f"{datetime.now():%Y%m%d_%H%M}_{name}.csv"
+    else:
+        folder, prefix = SUB_FOLDER.get(spec.name, (spec.name, ""))
+        (SUB_DIR / folder).mkdir(parents=True, exist_ok=True)
+        path = SUB_DIR / folder / f"{datetime.now(timezone.utc):%Y%m%d_%H%MZ}_{prefix}{name}.csv"
     validate(sub).to_csv(path, index=False, float_format="%.4f")
     return path
 
@@ -50,15 +59,19 @@ MARKER = ROOT / "experiments" / "logs" / "tests_passed_at"
 def _code_state() -> str | None:
     """HEAD commit if src/tests/configs have no uncommitted changes, else None."""
     git = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    if git("status", "--porcelain", "--", "src", "tests", "experiments/configs.py"):
+    if git("status", "--porcelain", "--", "src", "tests", "experiments/configs.py", "experiments/configs_part2.py"):
         return None
     return git("rev-parse", "HEAD")
 
 
 def run_tests() -> None:
-    """pytest gate. Skipped only when the suite already passed on this exact, clean commit."""
+    """pytest gate. Skipped only when the suite already passed on this exact, clean commit.
+    The subprocess inherits IAA_MARKET, so under another market the Part 1 data tests (marker part1_data) are
+    skipped by tests/conftest.py and the market-generic tests (incl. submission validation) still run."""
     state = _code_state()
-    if state and MARKER.exists() and MARKER.read_text().strip() == state:
+    name = get_spec().name                       # per-market marker: a part2 pass (Part 1 tests skipped) must not
+    marker = MARKER if name == "part1" else MARKER.with_name(f"{MARKER.name}_{name}")   # satisfy the Part 1 gate
+    if state and marker.exists() and marker.read_text().strip() == state:
         print(f"  tests already passed on {state[:7]} (code unchanged), gate satisfied")
         return
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", str(ROOT / "tests")], cwd=ROOT,
@@ -66,7 +79,7 @@ def run_tests() -> None:
     if r.returncode != 0:
         raise SystemExit("tests failed, not submitting:\n" + r.stdout[-3000:])
     if state:
-        MARKER.write_text(state)
+        marker.write_text(state)
 
 
 def _kaggle(*args) -> str:

@@ -160,11 +160,31 @@ def enrich(df: pd.DataFrame, customers: pd.DataFrame, addresses: pd.DataFrame, w
     return out
 
 
+def normalise_labels(df: pd.DataFrame, cols, log: list | None = None, label: str = "") -> pd.DataFrame:
+    """Map labels that differ only by case / surrounding whitespace to the most frequent spelling of their
+    stripped, lower-cased key (e.g. 'retired', 'Retired ' -> 'Retired'). Columns absent from df are skipped."""
+    cols = [c for c in cols if c in df.columns]
+    if not cols:
+        return df
+    df = df.copy()
+    for c in cols:
+        s = df[c]
+        key = s.where(s.isna(), s.astype(str).str.strip().str.lower())
+        canon = s.groupby(key).agg(lambda v: v.value_counts().index[0])
+        new = key.map(canon).where(s.notna())
+        if log is not None:
+            log.append({"line": label, "issue": f"{c} label variants (case/whitespace) merged",
+                        "rows": int((new != s)[s.notna()].sum())})
+        df[c] = new
+    return df
+
+
 def build_all(log: list | None = None) -> dict:
     """Cleaned train (with raw, undeveloped target), test, claims and lookup tables."""
     claims = net_claims(clean_claims(load("claims"), log))
-    out = {"claims": claims, "customers": load("customers"), "addresses": load("addresses"),
-           "weather": load("weather")}
+    norm = get_spec().normalise_labels
+    out = {"claims": claims, "customers": normalise_labels(load("customers"), norm, log, "customers"),
+           "addresses": load("addresses"), "weather": load("weather")}
     matched = []
     for line in get_spec().lines:
         tr = clean_policies(load(f"policies_{line}"), line, log)

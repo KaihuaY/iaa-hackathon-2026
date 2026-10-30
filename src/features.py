@@ -182,7 +182,16 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     if cfg.get("hist_nan_2021", False):
         # Data starts in 2021, so those rows' history is unobservable, not "no claims" (else history proxies the year).
         hist = [c for c in cols if c.startswith(("pol_", "cust_"))]
-        X.loc[train.year.values == spec.first_year, hist] = np.nan
+        if "market" in train.columns:              # pooled market: the first observed year of EACH market (Review 11)
+            mk, yr = train["market"].astype(str).values, train.year.values
+            first = pd.Series(yr).groupby(mk).transform("min").values
+            X.loc[yr == first, hist] = np.nan
+        else:
+            X.loc[train.year.values == spec.first_year, hist] = np.nan
+    if cfg.get("market_nb") and "market" in train.columns and "new_business" in train.columns:
+        # Review 11 (pooled only): explicit market x new-business level, e.g. "emerging_nb" (categorical below)
+        for F, raw in ((X, train), (Xt, test)):
+            F["market_nb"] = (raw["market"].astype(str) + np.where(raw["new_business"].astype(bool), "_nb", "_ren")).values
     if cfg.get("weather_pca"):
         from sklearn.decomposition import PCA
         w = [c for c in WEATHER if c in X]
@@ -204,6 +213,31 @@ def model_matrix(train: pd.DataFrame, test: pd.DataFrame, cfg: dict) -> tuple[pd
     if cfg.get("exposure_feature", False):                # row exposure (years) as a numeric feature
         X["expo_feat"] = train["exposure"].astype("float32").values
         Xt["expo_feat"] = test["exposure"].astype("float32").values
+    if any(cfg.get(k) for k in ("premium_log", "premium_rate", "premium_rel")) and "written_premium" in train:
+        # Review 13 (default off): the insurer's own rating as a feature. written_premium is the ANNUAL premium (flat
+        # across exposure bands), so premium_rate = log(premium / exposure) is mostly an exposure feature; premium_rel
+        # deflates by the mean premium of the same (market,) year so the 4-5 %/yr premium trend is not a calendar proxy.
+        for F, raw in ((X, train), (Xt, test)):
+            wp = pd.to_numeric(raw["written_premium"], errors="coerce").astype("float64")
+            lwp = np.log(wp.where(wp > 0))
+            if cfg.get("premium_log"):
+                F["log_premium"] = lwp.astype("float32").values
+            if cfg.get("premium_rate"):
+                F["log_premium_rate"] = (lwp - np.log(raw["exposure"].astype("float64").where(raw["exposure"] > 0))
+                                         ).astype("float32").values
+        if cfg.get("premium_rel"):
+            keys = ["market", "year"] if "market" in train.columns else ["year"]
+            both = pd.concat([train[keys + ["written_premium"]], test[keys + ["written_premium"]]], ignore_index=True)
+            if "market" in keys:
+                both["market"] = both["market"].astype(str)
+            mean = both.groupby(keys).written_premium.mean().rename("_wp_mean")
+            for F, raw in ((X, train), (Xt, test)):
+                k = raw[keys].copy()
+                if "market" in keys:
+                    k["market"] = k["market"].astype(str)
+                m = k.merge(mean, left_on=keys, right_index=True, how="left")["_wp_mean"].to_numpy(float)
+                F["log_premium_rel"] = np.log(pd.to_numeric(raw["written_premium"], errors="coerce").to_numpy(float) / m
+                                              ).astype("float32")
     if cfg.get("mileage_zero_nan", False) and "annual_mileage" in X:   # audit 19 Oct: 0 is a sentinel on 1.2 % of rows
         for F in (X, Xt):
             z = F["annual_mileage"] == 0

@@ -66,7 +66,8 @@ _STR = {"row_id", "policy_id", "customer_id", "address_id", "claim_id", "surname
         "energy_rating", "construction_type", "occupancy", "channel", "payment_method", "renewal_decision",
         "make_model", "body_type", "transmission", "vehicle_colour", "fuel_type", "cover_type",
         "overnight_parking", "vehicle_use", "tenure", "security_level", "line", "peril", "status",
-        "repairer_id", "third_party_id"}
+        "repairer_id", "third_party_id",
+        "driver_age_band", "policyholder_age_band", "gender"}   # Part 2 (emerging) categoricals; numeric ages absent there
 
 
 def expected_kind(col: str) -> str:

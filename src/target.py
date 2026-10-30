@@ -113,6 +113,89 @@ def _ibnr(df, claims, lc, line, cost, cap):
     return freq * sev * _row_integral(df, _daily((1 - comp) * rel)) / 365
 
 
+def _market_specs(pol: pd.DataFrame, claims: pd.DataFrame, cfg: dict):
+    """Pooled market (policy rows carry a `market` column): {market: (row mask, claim mask, dev spec)}, else None.
+
+    Each market's claims development (lag curve, late-severity relativity, BF a-priori frequency and severity) is
+    fitted on that market's own claims and rows. Claim market = market of its row_id, else of its policy_id, in `pol`
+    (claims that join neither are left out of every market's curve). Per-market overrides of curve_years /
+    mature_years / ref_sev_year come from the spec's optional `market_dev` dict ({market: {field: value}}).
+    target cfg `develop_by_market: False` restores the pooled development (Review 10 behaviour)."""
+    if "market" not in pol.columns or not cfg.get("develop_by_market", True):
+        return None
+    import dataclasses
+    spec = get_spec()
+    mk = pol["market"].astype(str)
+    by_row = pd.Series(mk.values, index=pol.row_id.values)
+    by_pol = pd.Series(mk.values, index=pol.policy_id.values) if "policy_id" in pol else pd.Series(dtype=object)
+    by_pol = by_pol[~by_pol.index.duplicated()]
+    cm = claims.row_id.map(by_row)
+    if "policy_id" in claims:
+        cm = cm.fillna(claims.policy_id.map(by_pol))
+    over = dict(getattr(spec, "market_dev", None) or {})
+    out = {}
+    for m in sorted(mk.unique()):
+        o = {k: v for k, v in over.get(m, {}).items() if k in ("curve_years", "mature_years", "ref_sev_year")}
+        out[m] = ((mk == m).values, (cm == m).values, dataclasses.replace(spec, **o) if o else spec)
+    return out
+
+
+def _develop_by_market(df, pol, claims, lc, line, capped, base, cap, cfg, days, M):
+    """Row completeness, BF IBNR (training and evaluation scale) per market, each with its own development."""
+    from market_spec import using_spec
+    comp_row, ibnr, ibnr_eval = np.zeros(len(df)), np.zeros(len(df)), np.zeros(len(df))
+    lc_m = lc.row_id.map(pd.Series(pol["market"].astype(str).values, index=pol.row_id.values)).values
+    for m, (rows, cmask, s) in M.items():
+        cl = claims[cmask]
+        with using_spec(s):
+            d = df[rows].copy()
+            d["completeness"] = _row_integral(d, _daily(completeness_curve(cl, line))) / days[rows]
+            sel = lc_m == m
+            l_m = lc[sel]
+            comp_row[rows] = d.completeness.values
+            if cfg.get("develop", True):
+                ibnr[rows] = _ibnr(d, cl, l_m, line, capped[sel], cap[m] if isinstance(cap, dict) else cap)
+            ibnr_eval[rows] = _ibnr(d, cl, l_m, line, base[sel], None)
+    return comp_row, ibnr, ibnr_eval
+
+
+def _cap_by_market(lclaims, lc, pol, cost, q, M, cap):
+    """target cfg `cap_by_market` (pooled market only): cap at quantile q of each market's own claims of the line
+    (claim market as in _market_specs); a claim whose row is in no market keeps the pooled cap `cap`.
+    Returns ({market: cap}, capped cost per claim of lc). Implies the per-market loading (each market's own level)."""
+    cm = {m: float(lclaims[cmask].net_incurred.quantile(q)) for m, (_, cmask, _) in M.items()}
+    lc_m = lc.row_id.map(pd.Series(pol["market"].astype(str).values, index=pol.row_id.values))
+    return cm, cost.clip(upper=pd.Series(lc_m.map(cm).fillna(cap).values, index=cost.index))
+
+
+def _loading_by_market(pol, test, lc, cost, capped, line, cfg, M):
+    """target cfg `loading_by_market` (pooled market only): large-loss loading fitted on each market's own mature
+    claims (segment loading per market if cfg loading == "segment", else one ratio per market), applied to that
+    market's training and test rows. Same cap for every market unless cap_by_market. Returns (rows, test, table, {market: overall ratio})."""
+    from market_spec import using_spec
+    rmap = pd.Series(pol["market"].astype(str).values, index=pol.row_id.values)
+    lc_m = lc.row_id.map(rmap).values
+    te_m = test["market"].astype(str).values if "market" in test else np.full(len(test), None, dtype=object)
+    lr, lt, tabs, overall = np.ones(len(pol)), np.ones(len(test)), [], {}
+    for m, (rows, _, s) in M.items():
+        sel, tsel = lc_m == m, te_m == m
+        with using_spec(s):
+            mature = (lc[sel].loss_date.dt.year <= s.last_mature_year).values
+            overall[m] = float(cost[sel][mature].sum() / capped[sel][mature].sum())
+            if cfg.get("loading") == "segment":
+                a, b, t = segment_loading(pol[rows], test[tsel], lc[sel], cost[sel], capped[sel], line)
+                tabs.append(t.assign(market=m))
+            else:
+                a, b = np.full(int(rows.sum()), overall[m]), np.full(int(tsel.sum()), overall[m])
+        lr[rows], lt[tsel] = a, b
+    if (~np.isin(te_m, list(M))).any():               # test rows of no training market: pooled overall ratio
+        mature = (lc.loss_date.dt.year <= get_spec().last_mature_year).values
+        lt[~np.isin(te_m, list(M))] = float(cost[mature].sum() / capped[mature].sum())
+    table = pd.concat(tabs, ignore_index=True) if tabs else pd.DataFrame(
+        {"market": list(overall), "loading": list(overall.values())})
+    return lr, lt, table, overall
+
+
 def peril_matrix(pol: pd.DataFrame, claims: pd.DataFrame, line: str, tgt: pd.DataFrame, info: dict,
                  min_claims: int | None = None) -> tuple[np.ndarray, list]:
     """Per-row training cost split by peril, consistent with y_train (same cap, trend; IBNR spread by peril share).
@@ -122,6 +205,8 @@ def peril_matrix(pol: pd.DataFrame, claims: pd.DataFrame, line: str, tgt: pd.Dat
     min_claims = spec.peril_min_claims if min_claims is None else min_claims
     lc = claims[(claims.line == line) & claims.row_id.notna()].copy()
     cost = lc.net_incurred.where(~lc.claim_id.isin(spec.suspect_claims), lc.paid_to_date)
+    if info.get("cap_by_market"):
+        raise NotImplementedError("peril_matrix: cap_by_market (per-market cap) not supported")
     if info.get("cap"):
         cost = cost.clip(upper=info["cap"])
     counts = lc.peril.value_counts()
@@ -198,11 +283,25 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
     df = pol[["row_id", "period_start", "period_end", "exposure", "written_premium"]].copy()
     df["year"] = df.period_start.dt.year
     days = ((df.period_end - df.period_start).dt.days + 1).values
-    df["completeness"] = _row_integral(df, _daily(completeness_curve(claims, line))) / days
-    df["rep_train"] = df.row_id.map(capped.groupby(lc.row_id).sum()).fillna(0.0)
-    df["rep_eval"] = df.row_id.map(base.groupby(lc.row_id).sum()).fillna(0.0)
-    df["ibnr"] = _ibnr(df, claims, lc, line, capped, cap) if cfg.get("develop", True) else 0.0
-    ibnr_eval = _ibnr(df, claims, lc, line, base, None)
+    M = _market_specs(pol, claims[claims.line == line], cfg)
+    cap_m = None
+    if M is not None and cfg.get("cap_by_market") and cap:      # pooled market: cap quantile per market (default off)
+        cap_m, capped = _cap_by_market(claims[claims.line == line], lc, pol, cost, cfg.get("cap_q"), M, cap)
+        loading = float(cost[mature].sum() / capped[mature].sum())
+    if M is None:                                     # single market (Part 1, Part 2): unchanged
+        df["completeness"] = _row_integral(df, _daily(completeness_curve(claims, line))) / days
+        df["rep_train"] = df.row_id.map(capped.groupby(lc.row_id).sum()).fillna(0.0)
+        df["rep_eval"] = df.row_id.map(base.groupby(lc.row_id).sum()).fillna(0.0)
+        df["ibnr"] = _ibnr(df, claims, lc, line, capped, cap) if cfg.get("develop", True) else 0.0
+        ibnr_eval = _ibnr(df, claims, lc, line, base, None)
+    else:                                             # pooled market: each market develops on its own claims
+        comp_row, ibnr_m, ibnr_eval = _develop_by_market(df, pol, claims[claims.line == line], lc, line, capped, base,
+                                                         cap_m or cap, cfg, days, M)
+        df["completeness"] = comp_row
+        df["rep_train"] = df.row_id.map(capped.groupby(lc.row_id).sum()).fillna(0.0)
+        df["rep_eval"] = df.row_id.map(base.groupby(lc.row_id).sum()).fillna(0.0)
+        df["ibnr"] = ibnr_m if cfg.get("develop", True) else 0.0
+        ibnr_eval = pd.Series(ibnr_eval, index=df.index)
 
     pp_year = (df.rep_train + df.ibnr).groupby(df.year).sum() / df.exposure.groupby(df.year).sum()
     method = cfg.get("trend", "premium")
@@ -221,7 +320,12 @@ def prepare_target(pol: pd.DataFrame, test: pd.DataFrame, claims: pd.DataFrame, 
         df["w"] = w1 * (w0.mean() / w1.mean())
     info = {"line": line, "cap": cap, "loading": loading, "trend": tf, "trend_method": method,
             "ibnr_share": float(df.ibnr.sum() / max(df.rep_train.sum() + df.ibnr.sum(), 1e-9))}
-    if cfg.get("loading") == "segment" and cap:
+    if cap_m:
+        info["cap_by_market"] = cap_m
+    if M is not None and (cfg.get("loading_by_market") or cap_m) and cap:
+        info["loading_rows"], info["loading_test"], info["loading_table"], info["loading_by_market"] = \
+            _loading_by_market(pol, test, lc, cost, capped, line, cfg, M)
+    elif cfg.get("loading") == "segment" and cap:
         info["loading_rows"], info["loading_test"], info["loading_table"] = segment_loading(pol, test, lc, cost, capped, line)
     if cfg.get("loading") == "model" and cap:             # per-row untrended totals for apply_model_loading
         rid = lc.row_id

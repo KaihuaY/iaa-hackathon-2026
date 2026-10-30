@@ -57,6 +57,9 @@ class MarketSpec:
                                                             "t": "timber", "w": "timber", "timber": "timber"})
     leaky_cols: tuple = ("renewal_decision", "customer_service_contacts")
     excluded_claim_statuses: tuple = ("repudiated",)
+    # text columns whose labels differ only by case / surrounding whitespace: each variant is mapped to the most
+    # frequent spelling of its stripped, lower-cased key (data.build_all). () = no change (Part 1).
+    normalise_labels: tuple = ()
     # ---- target
     suspect_claims: tuple = ("CL30973963",)
     peril_min_claims: int = 1000
@@ -209,3 +212,35 @@ REHEARSAL = register(dataclasses.replace(
               "motor": {**PART1.segments["motor"], "num": "driver_age"}},
     irrelevant={k: v for k, v in PART1.irrelevant.items() if k != "contents"},
 ))
+
+
+# ---- Part 2: the emerging market (data/part2/emerging; evidence and reasons per field in docs/part2_decisions.md)
+PART2 = register(dataclasses.replace(
+    PART1, name="part2", competition="iaa-ai-assisted-hackathon-2026-part-2", data_dir="data/part2/emerging",
+    train_years=(2023, 2024), test_year=2025,
+    curve_years=(2023,), mature_years=(2023,), ref_sev_year=2023,     # 2023 open share 4 %, 2024 20-25 %
+    immature_years=(2024,),
+    # unweighted mean over 2024 rows of the row completeness from the 2023 lag curve (the Part 1 derivation, which
+    # reproduces Part 1's 0.920 / 0.939 / 0.960 exactly); cross-check: 2024/2023 reported frequency 0.921 / 0.973 / 0.974
+    completeness_last_year={"motor": 0.923, "buildings": 0.944, "contents": 0.961},
+    holdout_year=2024, backtest_years=(2024,), max_lag=730, valuation_date="2024-12-31",   # last report 2024-12-30
+    expected_rows=None,                                              # 209,063 rows from sample_submission
+    construction_map={**PART1.construction_map, "brk": "brick", "stn": "stone", "wod": "timber", "mix": "non_standard"},
+    normalise_labels=("occupation",),                                # 'Retired' / 'retired' / 'Retired ' etc.
+    suspect_claims=(),
+    peril_min_claims=60,                                             # 9.1k claims: pools buildings subsidence (52) only
+    segments={**PART1.segments,                                      # no numeric driver age: value-group quartiles
+              "motor": {"kind": "quantile", "col": "vehicle_value_group", "q": (0.25, 0.5, 0.75), "prefix": "VVG"}},
+    noise_features=(),                                               # re-derive with the stability screen
+    monotone={k: v for k, v in PART1.monotone.items() if k != "annual_mileage"},
+    tuned={"min_data_in_leaf": 300, "feature_fraction": 0.5},        # ~47k / 27k / 35k rows per line
+))
+
+# Other modules may register more specs (e.g. a pooled developed + emerging market); optional.
+import importlib  # noqa: E402
+
+for _m in ("market_spec_pool",):
+    try:
+        importlib.import_module(_m)
+    except ImportError:
+        pass

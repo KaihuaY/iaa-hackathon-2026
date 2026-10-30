@@ -539,3 +539,37 @@ EXPERIMENTS.update({
     "T5_motor_p17": dict(desc="P20_135 with Tweedie power 1.7 on motor only (quick: motor +0.0007), 1.35 elsewhere", proposer="user (tail test)", model="lgbm",
                          params=_P135, params_by_line={"motor": {**_P135, "tweedie_variance_power": 1.7}}, target=_T135, features=_F135),
 })
+
+# 20 Oct lens L2a: peril seasonality (storm / escape of water in Dec-Feb) priced through the exposure offset
+_SEAS = lambda a, lines: {l: {"season_offset": a} for l in lines}
+EXPERIMENTS.update({
+    "P35_season": dict(desc="P20_135 with seasonal exposure (monthly peril-cost index, 2021-22) on all lines", proposer="AI (lens L2a, 20 Oct)", model="lgbm",
+                       params=_P135, target=_T135, target_by_line=_SEAS(1.0, ["motor", "buildings", "contents"]), features=_F135),
+    "P35_season_home": dict(desc="P20_135 with seasonal exposure on buildings/contents only", proposer="AI (lens L2a, 20 Oct)", model="lgbm",
+                            params=_P135, target=_T135, target_by_line=_SEAS(1.0, ["buildings", "contents"]), features=_F135),
+})
+
+# 22 Oct (user "go test"): complete the seed bags of the X30 family (F22 freq x sev and B27 smooth-boost), then X33
+EXPERIMENTS.update({
+    **{f"F22_b07_s{sd}": dict(desc=f"F22_b07_fs with seed {sd}", proposer="AI (final seed bag)", model="freqsev",
+                             params={"freq": {**TUNED, "min_data_in_leaf": 2000, "seed": sd},
+                                     "sev": {"num_leaves": 15, "min_data_in_leaf": 500, "learning_rate": 0.03, "lambda_l2": 50.0, "n_iter": 600, "seed": sd}},
+                             target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7), features={**HIST_F, "drop": NOISE + ["make_model"]}) for sd in (101, 202)},
+    "F22_b07_bag": dict(desc="F22_b07_fs averaged over 3 seeds", proposer="AI (final seed bag)", model="blend", average=True,
+                        parts=["F22_b07_fs", "F22_b07_s101", "F22_b07_s202"]),
+    **{f"B27_b07_s{sd}": dict(desc=f"B27_b07_smooth with boost seed {sd}", proposer="AI (final seed bag)", model="glmboost",
+                             params={"glm": _SMOOTH_GLM, **TUNED, "min_data_in_leaf": 2000, "monotone": MONOTONE, "tweedie_variance_power": 1.35, "seed": sd},
+                             target={**FULL_T, "cap_q": 0.99}, target_by_line=_SI_B(0.7),
+                             features={**HIST_F, "engineered": True, "drop": NOISE + ["make_model"] + EXPO_COUNTERS}) for sd in (101, 202)},
+    "B27_b07_bag": dict(desc="B27_b07_smooth averaged over 3 boost seeds", proposer="AI (final seed bag)", model="blend", average=True,
+                        parts=["B27_b07_smooth", "B27_b07_s101", "B27_b07_s202"]),
+    "X33_blend4_si07_allbags": dict(desc="X30 family, every part a 3-seed bag: P34_b07_bag, F22_b07_bag, A9_b07_bag, B27_b07_bag", proposer="AI (final seed bag)",
+                                    model="blend", step=0.1, parts=["P34_b07_bag", "F22_b07_bag", "A9_b07_bag", "B27_b07_bag"]),
+})
+
+import importlib  # optional market-specific config modules (Part 2, pooled) merge into the registry
+for _m in ("configs_part2", "configs_pool"):
+    try:
+        EXPERIMENTS.update(importlib.import_module(_m).EXPERIMENTS)
+    except ModuleNotFoundError as _e:
+        if _e.name != _m: raise
