@@ -1,0 +1,119 @@
+{'motor': (979968, 39), 'buildings': (707726, 27), 'contents': (721617, 28)} (163150, 12)
+[clean] motor train: customer_id left-padded to 8 chars (orphans before=98,110, after=0): 98,110
+[clean] motor train: address_id not found in addresses (orphan): 0
+[clean] motor train: duplicate row_id: 0
+[clean] motor test: customer_id left-padded to 8 chars (orphans before=25,554, after=0): 25,554
+[clean] motor test: address_id not found in addresses (orphan): 0
+[clean] motor test: duplicate row_id: 0
+[clean] motor train: orphan claims (policy_id not in motor policies): 0
+[clean] buildings train: customer_id left-padded to 8 chars (orphans before=0, after=0): 0
+[clean] buildings train: address_id not found in addresses (orphan): 0
+[clean] buildings train: duplicate row_id: 0
+[clean] buildings test: customer_id left-padded to 8 chars (orphans before=0, after=0): 0
+[clean] buildings test: address_id not found in addresses (orphan): 0
+[clean] buildings test: duplicate row_id: 0
+[clean] buildings train: orphan claims (policy_id not in buildings policies): 0
+[clean] contents train: customer_id left-padded to 8 chars (orphans before=0, after=0): 0
+[clean] contents train: address_id not found in addresses (orphan): 0
+[clean] contents train: duplicate row_id: 0
+[clean] contents test: customer_id left-padded to 8 chars (orphans before=0, after=0): 0
+[clean] contents test: address_id not found in addresses (orphan): 0
+[clean] contents test: duplicate row_id: 0
+[clean] contents train: orphan claims (policy_id not in contents policies): 0
+[clean] motor train: invalid/unparseable period dates: 0
+[clean] motor train: period_end < period_start: 0
+[clean] motor test: invalid/unparseable period dates: 0
+[clean] motor test: period_end < period_start: 0
+[clean] buildings train: invalid/unparseable period dates: 0
+[clean] buildings train: period_end < period_start: 0
+[clean] buildings test: invalid/unparseable period dates: 0
+[clean] buildings test: period_end < period_start: 0
+[clean] contents train: invalid/unparseable period dates: 0
+[clean] contents train: period_end < period_start: 0
+[clean] contents test: invalid/unparseable period dates: 0
+[clean] contents test: period_end < period_start: 0
+[clean] claims: invalid loss/report dates: 0
+[clean] claims: report_date < loss_date: 0
+[clean] claims: report_date after valuation date: 0
+[clean] claims: negative paid/incurred/recoveries: 0
+[clean] claims: incurred < paid: 0
+[clean] claims: recoveries > incurred: 0
+[clean] claims: duplicate claim_id: 0
+[clean] claims: exact duplicates ignoring claim_id (dropped): 604
+[clean] motor train: exposure outside (0,1] replaced by min(1,days/365): 3,991
+[clean] motor test: exposure outside (0,1] replaced by min(1,days/365): 0
+[clean] buildings train: exposure outside (0,1] replaced by min(1,days/365): 3,044
+[clean] buildings test: exposure outside (0,1] replaced by min(1,days/365): 0
+[clean] contents train: exposure outside (0,1] replaced by min(1,days/365): 3,088
+[clean] contents test: exposure outside (0,1] replaced by min(1,days/365): 0
+[clean] buildings train: sum_insured divided by 1000: 1,395
+[clean] buildings test: sum_insured divided by 1000: 370
+[clean] contents train: sum_insured divided by 1000: 1,402
+[clean] contents test: sum_insured divided by 1000: 360
+[clean] buildings train: construction_type label normalised (not already canonical): 560,124
+[clean] buildings test: construction_type label normalised (not already canonical): 145,548
+[clean] motor train: impossible years_licensed (> age-16) set to NaN: 2,962
+[clean] motor test: impossible years_licensed (> age-16) set to NaN: 755
+[clean] claims: loss_date before 2021 (outside any policy period): 273
+[clean] claims: repudiated (excluded from cost and count): 1,705
+{'buildings': 1.74, 'contents': 1.46, 'motor': 1.67} (Dec-2024 mean factor)
+share of claims with report delay > 36 months: 0.00003
+{2020: 1.0, 2021: 1.0, 2022: 1.0, 2023: 1.005, 2024: 1.07}
+[clean] claims: no policy row covers the loss date (dropped): 409
+         line  year    rows  exposure_sum    target_sum  target_reported_sum  claim_count  claim_count_ultimate  target_per_exposure
+0   buildings  2021  155729     140783.84  5.405283e+07         5.405283e+07       6195.0               6195.00               383.94
+1   buildings  2022  183864     149874.70  6.041923e+07         6.041718e+07       6683.0               6683.11               403.13
+2   buildings  2023  184132     149989.63  6.511256e+07         6.483247e+07       6817.0               6837.02               434.11
+3   buildings  2024  184001     149919.73  7.464449e+07         6.735395e+07       6571.0               7093.75               497.90
+4    contents  2021  158848     140932.57  1.486130e+07         1.486130e+07       5582.0               5582.00               105.45
+5    contents  2022  187632     149988.71  1.582078e+07         1.582078e+07       5942.0               5942.00               105.48
+6    contents  2023  187646     149978.11  1.757739e+07         1.753947e+07       6158.0               6169.64               117.20
+7    contents  2024  187491     149969.28  1.818252e+07         1.751604e+07       5988.0               6216.05               121.24
+8       motor  2021  216008     187993.25  1.058974e+08         1.058974e+08      27354.0              27354.00               563.30
+9       motor  2022  254685     199701.88  1.151432e+08         1.148907e+08      29288.0              29299.28               576.58
+10      motor  2023  254577     199685.20  1.201336e+08         1.173077e+08      27990.0              28157.94               601.61
+11      motor  2024  254698     199789.18  1.082617e+08         9.066698e+07      25864.0              27807.26               541.88
+largest single-claim ultimate costs: [12425972.0, 1118868.0, 758433.0]
+
+=== motor: 66 features, 979,968 train rows, 254,986 test rows
+  fold 0: D2=0.05656 best_iter=51  (16s)
+  fold 1: D2=0.07352 best_iter=81  (23s)
+  fold 2: D2=0.08131 best_iter=79  (30s)
+  fold 3: D2=0.07086 best_iter=74  (37s)
+  fold 4: D2=0.05630 best_iter=64  (44s)
+  motor OOF D2 = 0.06788
+  final rounds=76; test pred sum=94,993,408, mean per exposure=475.01; train target per exposure=570.95  (49s)
+
+=== buildings: 53 features, 707,726 train rows, 184,155 test rows
+  fold 0: D2=0.07798 best_iter=56  (9s)
+  fold 1: D2=0.10932 best_iter=64  (13s)
+  fold 2: D2=0.08409 best_iter=39  (17s)
+  fold 3: D2=0.09349 best_iter=70  (21s)
+  fold 4: D2=0.11040 best_iter=66  (25s)
+  buildings OOF D2 = 0.09518
+  final rounds=64; test pred sum=60,404,531, mean per exposure=402.04; train target per exposure=430.48  (28s)
+
+=== contents: 54 features, 721,617 train rows, 187,498 test rows
+  fold 0: D2=0.08491 best_iter=71  (9s)
+  fold 1: D2=0.07992 best_iter=69  (13s)
+  fold 2: D2=0.09296 best_iter=99  (18s)
+  fold 3: D2=0.09040 best_iter=71  (23s)
+  fold 4: D2=0.09150 best_iter=71  (27s)
+  contents OOF D2 = 0.08802
+  final rounds=83; test pred sum=15,933,066, mean per exposure=106.13; train target per exposure=112.45  (31s)
+         line                 scope       d2  best_iter   n_rows
+5       motor               oof_all  0.06788         69   979968
+6       motor  oof_excl_largest_row  0.07207          0   979967
+7       motor   oof_reported_target  0.07062          0   979968
+17  buildings               oof_all  0.09518         59   707726
+18  buildings  oof_excl_largest_row  0.09569          0   707725
+19  buildings   oof_reported_target  0.09811          0   707726
+29   contents               oof_all  0.08802         76   721617
+30   contents  oof_excl_largest_row  0.08759          0   721616
+31   contents   oof_reported_target  0.08846          0   721617
+0         ALL               oof_all  0.12676          0  2409311
+done in 119s
+
+real	2m4.633s
+user	0m0.000s
+sys	0m0.000s

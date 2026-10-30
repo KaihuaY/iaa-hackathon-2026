@@ -1,0 +1,59 @@
+rule,rows_affected
+"motor train: customer_id left-padded to 8 chars (orphans before=98,110, after=0)",98110
+motor train: address_id not found in addresses (orphan),0
+motor train: duplicate row_id,0
+"motor test: customer_id left-padded to 8 chars (orphans before=25,554, after=0)",25554
+motor test: address_id not found in addresses (orphan),0
+motor test: duplicate row_id,0
+motor train: orphan claims (policy_id not in motor policies),0
+"buildings train: customer_id left-padded to 8 chars (orphans before=0, after=0)",0
+buildings train: address_id not found in addresses (orphan),0
+buildings train: duplicate row_id,0
+"buildings test: customer_id left-padded to 8 chars (orphans before=0, after=0)",0
+buildings test: address_id not found in addresses (orphan),0
+buildings test: duplicate row_id,0
+buildings train: orphan claims (policy_id not in buildings policies),0
+"contents train: customer_id left-padded to 8 chars (orphans before=0, after=0)",0
+contents train: address_id not found in addresses (orphan),0
+contents train: duplicate row_id,0
+"contents test: customer_id left-padded to 8 chars (orphans before=0, after=0)",0
+contents test: address_id not found in addresses (orphan),0
+contents test: duplicate row_id,0
+contents train: orphan claims (policy_id not in contents policies),0
+motor train: invalid/unparseable period dates,0
+motor train: period_end < period_start,0
+motor test: invalid/unparseable period dates,0
+motor test: period_end < period_start,0
+buildings train: invalid/unparseable period dates,0
+buildings train: period_end < period_start,0
+buildings test: invalid/unparseable period dates,0
+buildings test: period_end < period_start,0
+contents train: invalid/unparseable period dates,0
+contents train: period_end < period_start,0
+contents test: invalid/unparseable period dates,0
+contents test: period_end < period_start,0
+claims: invalid loss/report dates,0
+claims: report_date < loss_date,0
+claims: report_date after valuation date,0
+claims: negative paid/incurred/recoveries,0
+claims: incurred < paid,0
+claims: recoveries > incurred,0
+claims: duplicate claim_id,0
+claims: exact duplicates ignoring claim_id (dropped),604
+"motor train: exposure outside (0,1] replaced by min(1,days/365)",3991
+"motor test: exposure outside (0,1] replaced by min(1,days/365)",0
+"buildings train: exposure outside (0,1] replaced by min(1,days/365)",3044
+"buildings test: exposure outside (0,1] replaced by min(1,days/365)",0
+"contents train: exposure outside (0,1] replaced by min(1,days/365)",3088
+"contents test: exposure outside (0,1] replaced by min(1,days/365)",0
+buildings train: sum_insured divided by 1000,1395
+buildings test: sum_insured divided by 1000,370
+contents train: sum_insured divided by 1000,1402
+contents test: sum_insured divided by 1000,360
+buildings train: construction_type label normalised (not already canonical),560124
+buildings test: construction_type label normalised (not already canonical),145548
+motor train: impossible years_licensed (> age-16) set to NaN,2962
+motor test: impossible years_licensed (> age-16) set to NaN,755
+claims: loss_date before 2021 (outside any policy period),273
+claims: repudiated (excluded from cost and count),1705
+claims: no policy row covers the loss date (dropped),409
