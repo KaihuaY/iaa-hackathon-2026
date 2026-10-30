@@ -53,9 +53,31 @@ python -P -E scripts/build_dashboard.py notebooks/05_part2_progress.py   # progr
 ```
 Public-score readings and the exact response model (`docs/part2_response.json`) are documented in `docs/part2_plan.md`; probe uploads are labelled `PROBE` and were never selected as a final. Ticked final: `20261030_0145Z_P2_F11v3_robust_nb105_ren103_si103_fl105.csv` (SHA-256 prefix `378f7b835d3ace59`).
 
-## Final deliverables
-`final_submission/`: write-up (`writeup.pdf`, ≤ 5 pages, both parts, office-premium build-up included), the two ticked prediction files, video script, office-premium CSV, and `GITHUB_CHECKLIST.md`. Rebuild the write-up with `python -P -E scripts/build_writeup.py`.
+## Final files (the two ticked submissions)
+Both files are rebuilt from the code here; the data comes from Kaggle (not committed). SHA-256 prefixes are those of the ticked files.
 
+**Part 1 — `20261022_1708_X33_blend4_si07_allbags_shrunk_c102.csv` (`d83ce8cba461830d`)**, public 0.12826, private 0.13777 (5th):
+```
+python -P -E scripts/reproduce.py --final X33_blend4_si07_allbags        # four families, 3-seed bags, per-line blend (experiments/configs.py)
+python -P -E scripts/segment_calibrate.py X33_blend4_si07_allbags --level-factors motor=1.012 contents=1.02     --band-line buildings --band-col sum_insured --band-factors 1.01 1.03 1.05 1.07 --tag shrunk_c102
+```
+The level factors are the credibility-shrunk public-leaderboard readings (`scripts/lb_response_fit.py`, `docs/final_pick_22oct.md`).
+
+**Part 2 — `20261030_0145Z_P2_F11v3_robust_nb105_ren103_si103_fl105.csv` (`378f7b835d3ace59`)**, public 0.16139:
+```
+python -P -E scripts/make_pooled_market.py                                   # developed history mapped to the emerging schema
+$env:IAA_MARKET="part2pool"
+python -P -E scripts/run_experiment.py R2_FINAL                              # pooled four-family blend (experiments/configs_pool.py)
+python -P -E scripts/part2_factors.py --base submissions/part2/<R2_FINAL file>.csv --tag R2_FINAL_shrunk_nb130_ren109_b107_c099     --factor motor:nb=1.30 --factor motor:ren=1.09 --factor buildings=1.07 --factor contents=0.99          # "file 6"
+python -P -E scripts/part2_feature_hunt.py factors --ref R2_FINAL            # -> experiments/logs/part2_feature_hunt/R2_FINAL/stage2_factors.csv
+python -P -E scripts/part2_factors.py --base submissions/part2/<file 6>.csv --tag F6_stage2_core_a3     --row-factors experiments/logs/part2_feature_hunt/R2_FINAL/stage2_factors.csv:core_a3                 # "core_a3"
+python -P -E scripts/build_f11v3.py                                          # core_a3 -> F11 v3 (levels, home tilts, renormalisation)
+python -P -E scripts/office_premium.py --predictions submissions/part2/<F11 v3 file>.csv --out docs/part2_office_premium.md --csv reports/part2_office_premium.csv
+```
+Every file in this chain, its public score and the decision taken on it are in `docs/part2_submissions.csv`; the readings behind the F11 v3 factors are in `docs/part2_plan.md` (30 Oct) and `docs/part2_response.json`.
+
+## Other deliverables
+The write-up (DOCX, built from its Markdown source by `scripts/build_writeup.py`), the video (built offline from per-beat voice recordings by `scripts/make_video.py`) and the two prediction files are submitted through the hackathon form, not through this repository. The development record is in `docs/experiment_log.md`, `experiments/log.csv`, `docs/ai_review_log.md` (20 second-model reviews) and `docs/part2_plan.md`.
 ## Licence
 MIT (see `LICENSE`).
 

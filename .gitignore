@@ -24,3 +24,8 @@ final_submission/prediction_*.csv
 final_submission/diagram/*.visual-check.*
 docs/writeup_user_edit_backup.docx
 reports/04_repro/
+
+# the write-up and the submission package go through the hackathon form, not the repository
+final_submission/
+docs/writeup_final.md
+docs/writeup_user_edit_backup.docx
