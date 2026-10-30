@@ -14,3 +14,12 @@ experiments/results/
 experiments/logs/
 .claude/
 data/rehearsal/
+
+# voice recordings and rendered video (personal; the video goes to the form, not GitHub)
+final_submission/voice/
+final_submission/video/
+Sound Recordings/
+# the two prediction files are attached to the submission form (18 MB); the office-premium CSV stays
+final_submission/prediction_*.csv
+final_submission/diagram/*.visual-check.*
+docs/writeup_user_edit_backup.docx

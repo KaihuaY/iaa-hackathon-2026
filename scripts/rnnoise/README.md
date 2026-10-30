@@ -1,0 +1,1 @@
+cb.rnnn is the "conjoined-burgers" model from https://github.com/GregorR/rnnoise-models (trained for recording noise, general signal). The repository README states the model files are not creative works and are not subject to copyright. Used by scripts/make_video.py through ffmpeg arnndn.
